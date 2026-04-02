@@ -1,0 +1,27 @@
+# Python
+venv/
+.venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+backend/venv/
+
+# Node
+node_modules/
+dist/
+dist-ssr/
+*.local
+frontend/node_modules/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Project
+*.log
+tmp/
+implementation_plan.md
+task.md
+walkthrough.md
+*.png
+*.webp

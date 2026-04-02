@@ -1,0 +1,110 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Virtual Wind Tunnel | Aero Engineering</title>
+    <link rel="stylesheet" href="src/style.css">
+    <script type="importmap">
+        {
+            "imports": {
+                "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
+                "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/"
+            }
+        }
+    </script>
+</head>
+<body>
+    <div class="dashboard">
+        <aside class="sidebar">
+            <header>
+                <h1 class="title-gradient">VIRTUAL TUNNEL</h1>
+                <p class="subtitle">Aero Engineering Station v2.0</p>
+            </header>
+
+            <section class="glass-card">
+                <h3>📂 Load Model</h3>
+                <div class="upload-zone" id="drop-zone">
+                    <p>Drop STL/OBJ or</p>
+                    <input type="file" id="file-input" hidden accept=".stl,.obj">
+                    <button class="btn-secondary" onclick="document.getElementById('file-input').click()">CHOOSE FILE</button>
+                </div>
+                <div class="presets-list">
+                    <select id="select-preset">
+                        <option value="custom">Custom Upload</option>
+                        <option value="ahmed">Ahmed Body (Benchmark)</option>
+                        <option value="drivaer">DrivAer Model</option>
+                        <option value="mira">MIRA Notchback</option>
+                    </select>
+                </div>
+            <section class="glass-card">
+                <h3>📊 Live Metrics</h3>
+                <div class="metric-grid">
+                    <div class="metric-item">
+                        <span class="metric-label">Downforce</span>
+                        <span class="metric-value" id="val-downforce">0 <small>N</small></span>
+                    </div>
+                    <div class="metric-item">
+                        <span class="metric-label">Drag</span>
+                        <span class="metric-value" id="val-drag">0 <small>N</small></span>
+                    </div>
+                    <div class="metric-item">
+                        <span class="metric-label">Efficiency</span>
+                        <span class="metric-value" id="val-eff">0.00</span>
+                    </div>
+                    <div class="metric-item">
+                        <span class="metric-label">Amb. Pressure</span>
+                        <span class="metric-value" id="val-press">101.3 <small>kPa</small></span>
+                    </div>
+                </div>
+            </section>
+
+            <section class="glass-card">
+                <h3>🎛️ Visualization Settings</h3>
+                <div class="controls-list">
+                    <label><span>Streamlines</span> <input type="checkbox" checked id="check-streamlines"></label>
+                    <label>
+                        <span>Particle Density</span>
+                        <input type="range" id="slider-particles" min="5" max="50" value="15">
+                    </label>
+                    <label><span>Pressure Heatmap</span> <input type="checkbox" checked id="check-heatmap"></label>
+                    <label><span>Wake Effect</span> <input type="checkbox" id="check-wake"></label>
+                </div>
+            </section>
+
+
+            <button class="btn-primary" id="btn-run">
+                <span>▶️ RUN SOLVER</span>
+            </button>
+
+            <footer class="sidebar-footer">
+                System Ready | Reynolds: 1.2e6 | SST k-ω
+            </footer>
+        </aside>
+
+        <main class="viewer-container">
+            <div id="three-container"></div>
+            
+            <div class="viewer-controls">
+                <button class="btn-secondary" id="btn-reset-view">RESET VIEW</button>
+            </div>
+
+            <div class="probe-overlay glass-card">
+
+                <h4>PROBE DATA</h4>
+                <div class="probe-data">
+                    <div id="probe-p">P: ---</div>
+                    <div id="probe-u">U: ---</div>
+                    <div id="probe-cp">Cp: ---</div>
+                </div>
+            </div>
+
+            <div class="loading-overlay" id="loading">
+                <div class="spinner"></div>
+                <p>SIMULATING FLOW...</p>
+            </div>
+        </main>
+    </div>
+    <script type="module" src="src/main.js"></script>
+</body>
+</html>
