@@ -1,10 +1,9 @@
 import React, { useState } from 'react';
 import WindTunnel from './components/WindTunnel';
-// Removed lucide-react due to persisting import issues during verification.
-// Using text/emoji substitutes for now.
 
 function App() {
   const [isSimulating, setIsSimulating] = useState(false);
+  const [sliceCount, setSliceCount] = useState(8);
   const [metrics, setMetrics] = useState({
     downforce: 0,
     drag: 0,
@@ -77,6 +76,19 @@ function App() {
               Wake Particles
               <input type="checkbox" />
             </label>
+            <div style={{ marginTop: '0.5rem', paddingTop: '0.5rem', borderTop: '1px solid var(--border-color)' }}>
+              <label style={{ fontSize: '0.9rem', display: 'flex', flexDirection: 'column', gap: '0.3rem' }}>
+                <span>Cross-Section Slices: <strong>{sliceCount}</strong></span>
+                <input
+                  type="range"
+                  min="3"
+                  max="20"
+                  value={sliceCount}
+                  onChange={(e) => setSliceCount(parseInt(e.target.value))}
+                  style={{ width: '100%', cursor: 'pointer' }}
+                />
+              </label>
+            </div>
           </div>
         </section>
 
@@ -93,7 +105,7 @@ function App() {
       </aside>
 
       <main className="viewer-container">
-        <WindTunnel />
+        <WindTunnel sliceCount={sliceCount} />
         
         <div className="probe-overlay glass-card">
           <h4 style={{ fontSize: '0.8rem', color: 'var(--accent-primary)', marginBottom: '0.5rem' }}>PROBE DATA</h4>

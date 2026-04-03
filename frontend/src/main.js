@@ -10,6 +10,7 @@ class AerodynamicTraces {
         this.scene.add(this.group);
         this.paths = null;
         this.maxVelocity = 20.0;
+        this.carCenter = new THREE.Vector3(0, -1.5, 0);
     }
 
     clear() {
@@ -19,6 +20,17 @@ class AerodynamicTraces {
             this.particleCloud.material.dispose();
             this.particleCloud = null;
         }
+        if(this.smokeTrails) {
+            this.smokeTrails.forEach(trail => {
+                trail.geometry.dispose();
+                trail.material.dispose();
+            });
+            this.smokeTrails = [];
+        }
+    }
+
+    setCarCenter(center) {
+        this.carCenter.copy(center);
     }
 
     // Adapter for simple coordinate arrays (mock/initial streamlines)
@@ -31,13 +43,21 @@ class AerodynamicTraces {
         this.updateBackendPaths(paths, this.maxVelocity);
     }
 
+    setCarFromObject(carObject) {
+        if(carObject) {
+            const box = new THREE.Box3().setFromObject(carObject);
+            const center = new THREE.Vector3();
+            box.getCenter(center);
+            this.setCarCenter(center);
+        }
+    }
+
     updateBackendPaths(paths, v_wind) {
         this.clear();
         if(!paths || paths.length === 0) return;
         this.paths = paths; 
         this.maxVelocity = v_wind;
         
-        // Count total nodes to render
         const particlesPerPath = 30; 
         const count = paths.length * particlesPerPath;
         
@@ -46,12 +66,14 @@ class AerodynamicTraces {
         const colors = new Float32Array(count * 3);
         const pathIndices = new Float32Array(count);
         const tParams = new Float32Array(count);
+        const alphaParams = new Float32Array(count);
         
         let pidx = 0;
         for(let i=0; i<paths.length; i++) {
             for(let j=0; j<particlesPerPath; j++) {
                 pathIndices[pidx] = i;
                 tParams[pidx] = Math.random(); 
+                alphaParams[pidx] = 1.0;
                 pidx++;
             }
         }
@@ -60,11 +82,12 @@ class AerodynamicTraces {
         geometry.setAttribute('color', new THREE.BufferAttribute(colors, 3));
         geometry.setAttribute('pathIndex', new THREE.BufferAttribute(pathIndices, 1));
         geometry.setAttribute('tParam', new THREE.BufferAttribute(tParams, 1));
+        geometry.setAttribute('alpha', new THREE.BufferAttribute(alphaParams, 1));
         
         const material = new THREE.PointsMaterial({
-            size: 0.15,
+            size: 0.18,
             transparent: true,
-            opacity: 0.8,
+            opacity: 0.7,
             blending: THREE.AdditiveBlending,
             depthWrite: false,
             vertexColors: true
@@ -72,6 +95,71 @@ class AerodynamicTraces {
         
         this.particleCloud = new THREE.Points(geometry, material);
         this.group.add(this.particleCloud);
+        
+        this.createSmokeTrails(paths);
+    }
+    
+    createSmokeTrails(paths) {
+        this.smokeTrails = [];
+        
+        const numTrails = Math.min(25, paths.length);
+        const trailIndices = [];
+        for(let i = 0; i < paths.length; i += Math.ceil(paths.length / numTrails)) {
+            trailIndices.push(i);
+        }
+        
+        for(const pathIdx of trailIndices) {
+            const pathData = paths[pathIdx];
+            if(!pathData || !pathData.coords || pathData.coords.length < 2) continue;
+            
+            const trailGeometry = new THREE.BufferGeometry();
+            const numPoints = 60;
+            const positions = new Float32Array(numPoints * 3);
+            const opacities = new Float32Array(numPoints);
+            
+            for(let i = 0; i < numPoints; i++) {
+                const t = i / (numPoints - 1);
+                const coordIdx = Math.floor(t * (pathData.coords.length - 1));
+                const nextIdx = Math.min(coordIdx + 1, pathData.coords.length - 1);
+                const frac = (t * (pathData.coords.length - 1)) - coordIdx;
+                
+                const c1 = pathData.coords[coordIdx];
+                const c2 = pathData.coords[nextIdx];
+                
+                positions[i*3] = c1[0] + (c2[0] - c1[0]) * frac;
+                positions[i*3+1] = c1[1] + (c2[1] - c1[1]) * frac;
+                positions[i*3+2] = c1[2] + (c2[2] - c1[2]) * frac;
+                
+                const dx = positions[i*3] - this.carCenter.x;
+                const isDownstream = dx > 0;
+                const distFromCenter = Math.abs(dx) / 5;
+                
+                if(isDownstream) {
+                    const spreadFactor = Math.min(1, distFromCenter * 0.5);
+                    const jitter = (Math.random() - 0.5) * 0.15 * spreadFactor;
+                    positions[i*3+1] += jitter;
+                    positions[i*3+2] += jitter;
+                    opacities[i] = 0.4 * (1 - distFromCenter * 0.3);
+                } else {
+                    opacities[i] = 0.5;
+                }
+            }
+            
+            trailGeometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+            trailGeometry.setAttribute('opacity', new THREE.BufferAttribute(opacities, 1));
+            
+            const trailMaterial = new THREE.LineBasicMaterial({
+                color: 0x88ccff,
+                transparent: true,
+                opacity: 0.25,
+                blending: THREE.AdditiveBlending,
+                linewidth: 1
+            });
+            
+            const trail = new THREE.Line(trailGeometry, trailMaterial);
+            this.smokeTrails.push(trail);
+            this.group.add(trail);
+        }
     }
     
     updateParticles(deltaTime, loopDuration) {
@@ -106,26 +194,86 @@ class AerodynamicTraces {
             positions[i*3+1] = p1[1] + (p2[1]-p1[1])*frac;
             positions[i*3+2] = p1[2] + (p2[2]-p1[2])*frac;
             
-            if (pathData.type === 'vortex') {
-                colors[i*3] = 0.6;
-                colors[i*3+1] = 0.6;
-                colors[i*3+2] = 0.6;
-            } else {
-                const v1 = vels[indexFloor];
-                const v2 = vels[indexCeil];
-                const v = v1 + (v2-v1)*frac;
-                const speedNorm = Math.min(1.0, Math.max(0.0, v / this.maxVelocity));
+            const worldX = positions[i*3];
+            const dx = worldX - this.carCenter.x;
+            const isDownstream = dx > 0;
+            const distFromCar = Math.sqrt(
+                Math.pow(positions[i*3+1] - this.carCenter.y, 2) + 
+                Math.pow(positions[i*3+2] - this.carCenter.z, 2)
+            );
+            
+            let smokeOpacity = 0.7;
+            let r, g, b;
+            
+            if (!isDownstream) {
+                const upstreamPos = Math.max(0, 1 - Math.abs(dx) / 10);
+                smokeOpacity = 0.2 + upstreamPos * 0.3;
                 
-                // Slow = Red (1,0,0), Fast = Cyan/Blue (0, 0.9, 1)
-                colors[i*3]   = 1.0 - speedNorm*0.8; // red drops
-                colors[i*3+1] = speedNorm * 0.9;
-                colors[i*3+2] = speedNorm * 1.0;
+                r = 0.7;
+                g = 0.85;
+                b = 1.0;
+            } else {
+                const wakeIntensity = Math.min(1, distFromCar / 3);
+                smokeOpacity = 0.5 - wakeIntensity * 0.3;
+                
+                if (pathData.type === 'vortex') {
+                    r = 0.6;
+                    g = 0.6;
+                    b = 0.65;
+                } else {
+                    const v1 = vels[indexFloor];
+                    const v2 = vels[indexCeil];
+                    const v = v1 + (v2-v1)*frac;
+                    const speedNorm = Math.min(1.0, Math.max(0.0, v / this.maxVelocity));
+                    
+                    r = 1.0 - speedNorm * 0.8;
+                    g = speedNorm * 0.9;
+                    b = speedNorm * 1.0;
+                }
+                
+                const spreadNoise = Math.sin(t * 50 + i) * 0.05;
+                positions[i*3+1] += spreadNoise * (1 + wakeIntensity);
+                positions[i*3+2] += Math.cos(t * 40 + i) * 0.05 * (1 + wakeIntensity);
             }
+            
+            colors[i*3] = r * smokeOpacity;
+            colors[i*3+1] = g * smokeOpacity;
+            colors[i*3+2] = b * smokeOpacity;
         }
         
         this.particleCloud.geometry.attributes.position.needsUpdate = true;
         this.particleCloud.geometry.attributes.color.needsUpdate = true;
         this.particleCloud.geometry.attributes.tParam.needsUpdate = true;
+        
+        this.updateSmokeTrails(deltaTime);
+    }
+    
+    updateSmokeTrails(deltaTime) {
+        if(!this.smokeTrails || this.smokeTrails.length === 0) return;
+        
+        const time = performance.now() * 0.001;
+        
+        for(const trail of this.smokeTrails) {
+            const positions = trail.geometry.attributes.position.array;
+            const opacities = trail.geometry.attributes.opacity.array;
+            
+            for(let i = 0; i < positions.length / 3; i++) {
+                const x = positions[i*3];
+                const dx = x - this.carCenter.x;
+                
+                if(dx > 0) {
+                    const distFromCenter = Math.abs(dx) / 5;
+                    const turbulence = Math.sin(time * 2 + i * 0.5) * 0.1 * distFromCenter;
+                    positions[i*3+1] += turbulence * deltaTime * 2;
+                    positions[i*3+2] += Math.cos(time * 1.5 + i * 0.3) * 0.08 * distFromCenter * deltaTime * 2;
+                    
+                    opacities[i] = Math.max(0.05, 0.35 - distFromCenter * 0.15);
+                }
+            }
+            
+            trail.geometry.attributes.position.needsUpdate = true;
+            trail.geometry.attributes.opacity.needsUpdate = true;
+        }
     }
 }
 
@@ -342,6 +490,14 @@ class WindTunnelApp {
         
         document.getElementById('btn-reset-view').addEventListener('click', () => this.resetCamera());
         
+        // Force panel click to close
+        document.getElementById('force-panel')?.addEventListener('click', (e) => {
+            e.stopPropagation();
+            this.hideForcePanel();
+            this.probeLocked = false;
+            this.probeMarker.visible = false;
+        });
+        
         const velocitySlider = document.getElementById('slider-velocity');
         const velocityVal = document.getElementById('velocity-val');
         if (velocitySlider) {
@@ -386,6 +542,14 @@ class WindTunnelApp {
         
         document.getElementById('check-streamlines')?.addEventListener('change', (e) => {
             if(this.flowParticles) this.flowParticles.group.visible = e.target.checked;
+        });
+        
+        document.getElementById('check-smoke')?.addEventListener('change', (e) => {
+            if(this.flowParticles && this.flowParticles.smokeTrails) {
+                this.flowParticles.smokeTrails.forEach(trail => {
+                    trail.visible = e.target.checked;
+                });
+            }
         });
         
         document.getElementById('check-heatmap')?.addEventListener('change', (e) => {
@@ -555,6 +719,10 @@ class WindTunnelApp {
         const glowMat = new THREE.MeshBasicMaterial({ color: 0xff00ea, transparent: true, opacity: 0.3 });
         this.probeGlow = new THREE.Mesh(glowGeo, glowMat);
         this.probeMarker.add(this.probeGlow);
+        
+        // Create force vectors visualization group
+        this.forceVectorsGroup = new THREE.Group();
+        this.scene.add(this.forceVectorsGroup);
     }
 
     resetCamera() {
@@ -822,6 +990,11 @@ class WindTunnelApp {
         this.probeLocked = false;
         this.probeMarker.visible = false;
 
+        // Update flow particles with car center
+        if(this.flowParticles) {
+            this.flowParticles.setCarCenter(new THREE.Vector3(0, -1.5, 0));
+        }
+
         // Re-generate physics-based streamlines with the real model AABB.
         // We wait one frame so matrixWorld is updated after position.y is set.
         requestAnimationFrame(() => {
@@ -838,6 +1011,14 @@ class WindTunnelApp {
             this.wireframeHelper = new THREE.BoxHelper(this.car, 0x00ff88);
             this.wireframeHelper.visible = this.wireframeActive;
             this.scene.add(this.wireframeHelper);
+            
+            // Update car center for flow visualization
+            if(this.flowParticles) {
+                const box = new THREE.Box3().setFromObject(this.car);
+                const carCenter = new THREE.Vector3();
+                box.getCenter(carCenter);
+                this.flowParticles.setCarCenter(carCenter);
+            }
         });
     }
 
@@ -981,6 +1162,9 @@ class WindTunnelApp {
             this.probeMarker.position.copy(intersects[0].point);
             this.updateProbe();
 
+            // Show force panel and vectors
+            this.showForcePanel(intersects[0]);
+
             // Spawn arrow on every click when the option is enabled.
             // Offset origin along the face normal so the arrow tail
             // sits ON the surface instead of inside the mesh.
@@ -1003,6 +1187,123 @@ class WindTunnelApp {
         } else {
             this.probeLocked = false;
             this.probeMarker.visible = false;
+            this.hideForcePanel();
+        }
+    }
+
+    showForcePanel(intersection) {
+        const panel = document.getElementById('force-panel');
+        if (!panel) return;
+        
+        const point = intersection.point;
+        const faceNormal = intersection.face 
+            ? intersection.face.normal.clone().transformDirection(intersection.object.matrixWorld).normalize()
+            : new THREE.Vector3(1, 0, 0);
+        
+        // Calculate forces at this point
+        const distFromFront = point.x - this.carGroup.position.x;
+        
+        // Pressure force (Bernoulli)
+        const p_static = 101325;
+        const dynamicP = 0.5 * 1.225 * this.v_wind * this.v_wind;
+        const pressure = p_static + dynamicP * (1 - Math.abs(distFromFront) / 5);
+        
+        // Velocity
+        const velocity = this.v_wind * (0.4 + 0.6 * (distFromFront / 10));
+        
+        // Drag component (pressure drag)
+        const dragForce = pressure * 0.01 * Math.max(0, distFromFront);
+        
+        // Downforce component
+        const downforce = pressure * 0.005 * (1 - Math.abs(distFromFront) / 8);
+        
+        // Shear stress (viscous)
+        const shearStress = 0.5 * 1.225 * velocity * velocity * 0.003;
+        
+        // Create force data
+        const forces = [
+            { name: 'Pressure', value: pressure, unit: 'Pa', color: '#ff6b6b' },
+            { name: 'Velocity', value: velocity, unit: 'm/s', color: '#4ecdc4' },
+            { name: 'Drag Force', value: dragForce, unit: 'N', color: '#ffe66d' },
+            { name: 'Downforce', value: downforce, unit: 'N', color: '#95e1d3' },
+            { name: 'Shear', value: shearStress, unit: 'Pa', color: '#a8e6cf' }
+        ];
+        
+        // Update panel
+        const forceList = document.getElementById('force-list');
+        forceList.innerHTML = '';
+        
+        forces.forEach(force => {
+            const item = document.createElement('div');
+            item.className = 'flex justify-between items-center';
+            item.innerHTML = `
+                <span class="flex items-center gap-2">
+                    <span class="w-2 h-2 rounded-full" style="background-color: ${force.color}"></span>
+                    <span class="text-on-surface-variant">${force.name}</span>
+                </span>
+                <span class="font-mono font-bold" style="color: ${force.color}">${force.value.toFixed(2)} <span class="text-[9px] text-slate-500">${force.unit}</span></span>
+            `;
+            forceList.appendChild(item);
+        });
+        
+        panel.classList.remove('opacity-0');
+        
+        // Draw 3D force vectors
+        this.drawForceVectors(point, faceNormal, forces);
+    }
+
+    hideForcePanel() {
+        const panel = document.getElementById('force-panel');
+        if (panel) {
+            panel.classList.add('opacity-0');
+        }
+        
+        // Clear 3D force vectors
+        this.clearForceVectors();
+    }
+
+    drawForceVectors(point, normal, forces) {
+        this.clearForceVectors();
+        
+        const origin = point.clone();
+        
+        // Direction vectors for different forces
+        const flowDir = new THREE.Vector3(1, 0, 0);
+        const upDir = new THREE.Vector3(0, 1, 0);
+        const dragDir = normal.clone().negate();
+        
+        const forceConfigs = [
+            { direction: flowDir, value: forces[1].value / 10, color: 0x4ecdc4, name: 'velocity' },
+            { direction: dragDir, value: forces[2].value / 100, color: 0xffe66d, name: 'drag' },
+            { direction: upDir, value: forces[3].value / 100, color: 0x95e1d3, name: 'downforce' },
+            { direction: normal.clone().negate(), value: forces[0].value / 1000, color: 0xff6b6b, name: 'pressure' }
+        ];
+        
+        forceConfigs.forEach((config) => {
+            const length = Math.min(3, Math.max(0.3, config.value));
+            const arrow = new THREE.ArrowHelper(
+                config.direction,
+                origin.clone(),
+                length,
+                config.color,
+                length * 0.25,
+                length * 0.12
+            );
+            
+            arrow.line.material.transparent = true;
+            arrow.line.material.opacity = 0.9;
+            arrow.cone.material.transparent = true;
+            arrow.cone.material.opacity = 0.9;
+            
+            this.forceVectorsGroup.add(arrow);
+        });
+    }
+
+    clearForceVectors() {
+        while(this.forceVectorsGroup.children.length > 0) {
+            const arrow = this.forceVectorsGroup.children[0];
+            this.forceVectorsGroup.remove(arrow);
+            arrow.dispose?.();
         }
     }
 
