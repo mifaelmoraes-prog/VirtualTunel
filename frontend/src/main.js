@@ -328,9 +328,13 @@ class WindTunnelApp {
         this.createCar();
         this.createProbeMarker();
         this.flowParticles = new AerodynamicTraces(this.scene);
-        this.flowArrows = new FlowArrowManager(this.scene);
+        this.flowArrows   = new FlowArrowManager(this.scene);
+        this.wireframeHelper = null;  // BoxHelper for debug
+        this.wireframeActive = false;
         
-        this.flowParticles.updateStreamlines(this.generateMockPaths());
+        // Physics paths generated after model loads (see updateModel)
+        // Initial placeholder until OBJ finishes loading:
+        this._physicsPathsPending = true;
 
         window.addEventListener('resize', () => this.onWindowResize());
         window.addEventListener('mousemove', (e) => this.onMouseMove(e));
@@ -401,6 +405,18 @@ class WindTunnelApp {
 
         document.getElementById('check-flow-arrows')?.addEventListener('change', (e) => {
             if(this.flowArrows) this.flowArrows.setVisible(e.target.checked);
+        });
+
+        document.getElementById('check-wireframe')?.addEventListener('change', (e) => {
+            this.wireframeActive = e.target.checked;
+            // Toggle solid material wireframe property
+            if (this.carMaterial) {
+                this.carMaterial.wireframe = this.wireframeActive;
+            }
+            // Toggle BoxHelper
+            if (this.wireframeHelper) {
+                this.wireframeHelper.visible = this.wireframeActive;
+            }
         });
 
         // Unit system toggle
@@ -547,30 +563,144 @@ class WindTunnelApp {
         this.controls.update();
     }
 
-    generateMockPaths() {
+    /**
+     * Generate physically-plausible streamlines around the car's real AABB.
+     * Uses a Rankine-body inspired potential flow model:
+     *  - Uniform upstream flow in +X direction
+     *  - Deflection field computed from the AABB half-extents
+     *  - Bernoulli acceleration where local cross-section narrows
+     *  - Low-velocity wake downstream
+     *  - Zero penetration enforced by clamping paths outside the AABB
+     *
+     * @param {number} numPaths - number of streamlines to generate
+     * @returns {Array} array of coordinate-arrays [[x,y,z], ...]
+     */
+    generatePhysicsPaths(numPaths = 40) {
+        // --- Get real AABB from car geometry ---
+        let bbox = new THREE.Box3();
+        if (this.car && this.car.geometry) {
+            this.car.geometry.computeBoundingBox();
+            bbox.copy(this.car.geometry.boundingBox);
+            // Apply car's world transform (position.y = -1.5, etc.)
+            bbox.applyMatrix4(this.car.matrixWorld);
+        } else {
+            // Fallback: small box at origin
+            bbox.setFromCenterAndSize(new THREE.Vector3(0, -1.5, 0), new THREE.Vector3(4, 1.5, 2));
+        }
+
+        const center = new THREE.Vector3();
+        bbox.getCenter(center);
+        const size   = new THREE.Vector3();
+        bbox.getSize(size);
+
+        // Half-extents with a small margin
+        const hx = size.x * 0.5 + 0.3;
+        const hy = size.y * 0.5 + 0.3;
+        const hz = size.z * 0.5 + 0.3;
+
+        // Stream domain: upstream from -14 to downstream +14 in X
+        const xStart = center.x - 14;
+        const xEnd   = center.x + 14;
+        const steps  = 40;
+        const stepX  = (xEnd - xStart) / (steps - 1);
+
+        // Spawn Y/Z coords on a grid slightly wider than the body
+        const spreadY = hy * 2.8;
+        const spreadZ = hz * 2.8;
         const paths = [];
-        for (let i = 0; i < 30; i++) {
-            const p = [];
-            const baseY = (Math.random() - 0.5) * 6;
-            const baseZ = (Math.random() - 0.5) * 6;
-            for (let j = 0; j < 30; j++) {
-                const x = -15 + j * 1;
-                // Distance to a mock bounding box around (0,0,0)
-                const dist = Math.sqrt(x*x + baseY*baseY + baseZ*baseZ);
-                let defY = 0, defZ = 0;
-                if (dist < 4) {
-                    // push air away from the center obstacle
-                    const push = Math.pow(1 - dist/4, 2) * 3;
-                    defY = (baseY >= 0 ? 1 : -1) * push;
-                    defZ = (baseZ >= 0 ? 1 : -1) * push;
+
+        for (let i = 0; i < numPaths; i++) {
+            // Distribute streamline seeds uniformly (jittered grid)
+            const baseY = center.y + (((i % 7) / 6) - 0.5) * spreadY * 2 + (Math.random() - 0.5) * 0.4;
+            const baseZ = center.z + (Math.floor(i / 7) / Math.ceil(numPaths / 7) - 0.5) * spreadZ * 2 + (Math.random() - 0.5) * 0.4;
+
+            const pts = [];
+            let curY = baseY;
+            let curZ = baseZ;
+
+            for (let j = 0; j < steps; j++) {
+                const x = xStart + j * stepX;
+                const dx = x - center.x;   // relative to body center
+                const dy = curY - center.y;
+                const dz = curZ - center.z;
+
+                // Normalised distance from box surface in each axis
+                const qx = Math.abs(dx) / hx;
+                const qy = Math.abs(dy) / hy;
+                const qz = Math.abs(dz) / hz;
+
+                // Potential-flow-inspired influence radius (1.8× the body half-extents)
+                const influence = 1.8;
+
+                // Is this point inside the influence zone?
+                const inInfluenceY = qy < influence;
+                const inInfluenceZ = qz < influence;
+                const nearBody     = qx < influence && inInfluenceY && inInfluenceZ;
+
+                if (nearBody) {
+                    // Compute a smooth displacement field that pushes flow away from the body
+                    // The displacement decays to 0 at the influence boundary (smooth)
+                    const blendY = Math.max(0, 1.0 - qy / influence);
+                    const blendZ = Math.max(0, 1.0 - qz / influence);
+                    const blendX = Math.max(0, 1.0 - qx / influence);
+                    const totalBlend = blendX * Math.max(blendY, blendZ);
+
+                    // Direction away from body surface (signed)
+                    const signY = dy >= 0 ? 1 : -1;
+                    const signZ = dz >= 0 ? 1 : -1;
+
+                    // Primary deflection: push in the direction already offset
+                    // (whichever axis is most "open")
+                    let defY = 0, defZ = 0;
+                    if (Math.abs(dy) / hy >= Math.abs(dz) / hz) {
+                        defY = signY * hy * totalBlend * 1.4;
+                        defZ = signZ * hz * totalBlend * 0.4;
+                    } else {
+                        defZ = signZ * hz * totalBlend * 1.4;
+                        defY = signY * hy * totalBlend * 0.4;
+                    }
+
+                    curY += defY * stepX / hx;
+                    curZ += defZ * stepX / hz;
                 }
-                // Also give a slight upward lift effect since car.position.y is -1.5
-                // The center of the car is around y=0
-                p.push([x, baseY + defY, baseZ + defZ]);
+
+                // ── Wake: downstream turbulent region ──────────────────
+                // Reduced velocity + Gaussian perturbation mimicking turbulent wake
+                const isWake = dx > 0 && Math.abs(dy) < hy * 1.3 && Math.abs(dz) < hz * 1.3;
+                if (isWake) {
+                    const wakeFade = Math.exp(-dx / (hx * 2.5));  // decays away from body
+                    curY += (Math.random() - 0.5) * 0.08 * wakeFade;
+                    curZ += (Math.random() - 0.5) * 0.08 * wakeFade;
+                }
+
+                // ── Hard clamp: never enter the solid AABB ─────────────
+                // If the path somehow enters the bounding box, push it to the nearest face
+                const inside =
+                    x  > center.x - hx && x  < center.x + hx &&
+                    curY > center.y - hy && curY < center.y + hy &&
+                    curZ > center.z - hz && curZ < center.z + hz;
+
+                if (inside) {
+                    // Push to nearest face along Y or Z
+                    const overlapY = hy - Math.abs(curY - center.y);
+                    const overlapZ = hz - Math.abs(curZ - center.z);
+                    if (overlapY <= overlapZ) {
+                        curY = center.y + (curY >= center.y ? hy : -hy) * 1.01;
+                    } else {
+                        curZ = center.z + (curZ >= center.z ? hz : -hz) * 1.01;
+                    }
+                }
+
+                pts.push([x, curY, curZ]);
             }
-            paths.push(p);
+            paths.push(pts);
         }
         return paths;
+    }
+
+    /** @deprecated kept for reference only */
+    generateMockPaths() {
+        return this.generatePhysicsPaths();
     }
 
     createCar() {
@@ -691,8 +821,24 @@ class WindTunnelApp {
         this.car.position.y = -1.5;
         this.probeLocked = false;
         this.probeMarker.visible = false;
-        
-        // Backend now native computes vortex paths.
+
+        // Re-generate physics-based streamlines with the real model AABB.
+        // We wait one frame so matrixWorld is updated after position.y is set.
+        requestAnimationFrame(() => {
+            this.renderer.render(this.scene, this.camera); // force matrix update
+            const paths = this.generatePhysicsPaths(50);
+            this.flowParticles.updateStreamlines(paths);
+            this._physicsPathsPending = false;
+
+            // Refresh wireframe helper with new geometry
+            if (this.wireframeHelper) {
+                this.scene.remove(this.wireframeHelper);
+                this.wireframeHelper.dispose?.();
+            }
+            this.wireframeHelper = new THREE.BoxHelper(this.car, 0x00ff88);
+            this.wireframeHelper.visible = this.wireframeActive;
+            this.scene.add(this.wireframeHelper);
+        });
     }
 
     async runSimulation() {
@@ -835,12 +981,24 @@ class WindTunnelApp {
             this.probeMarker.position.copy(intersects[0].point);
             this.updateProbe();
 
-            // Spawn arrow on every click when the option is enabled
+            // Spawn arrow on every click when the option is enabled.
+            // Offset origin along the face normal so the arrow tail
+            // sits ON the surface instead of inside the mesh.
             if (this.flowArrows && this.flowArrows.visible) {
-                const hitPoint = intersects[0].point;
-                const dir = this._sampleFlowDirection(hitPoint);
+                const hitPoint  = intersects[0].point;
+                const hitObject = intersects[0].object;
+                const faceNormal = intersects[0].face
+                    ? intersects[0].face.normal.clone()
+                          .transformDirection(hitObject.matrixWorld)
+                          .normalize()
+                    : new THREE.Vector3(0, 1, 0);
+
+                // Place tail slightly outside the surface
+                const arrowOrigin = hitPoint.clone().addScaledVector(faceNormal, 0.18);
+
+                const dir   = this._sampleFlowDirection(hitPoint);
                 const speed = this._rawProbeU !== null ? this._rawProbeU : this.v_wind * 0.8;
-                this.flowArrows.spawnArrow(hitPoint, dir, speed, this.v_wind);
+                this.flowArrows.spawnArrow(arrowOrigin, dir, speed, this.v_wind);
             }
         } else {
             this.probeLocked = false;
@@ -944,6 +1102,19 @@ class WindTunnelApp {
             this.probeGlow.scale.setScalar(1 + Math.sin(performance.now() * 0.01) * 0.2);
         }
         
+        // Generate initial physics paths once the model is ready (deferred load)
+        if (this._physicsPathsPending && this.car && this.car.geometry &&
+            this.car.geometry.attributes && this.car.geometry.attributes.position) {
+            this._physicsPathsPending = false;
+            const paths = this.generatePhysicsPaths(50);
+            this.flowParticles.updateStreamlines(paths);
+        }
+
+        // Update BoxHelper to track any transforms
+        if (this.wireframeHelper && this.wireframeActive) {
+            this.wireframeHelper.update();
+        }
+
         // Update true Transient Backend Frames
         const dt = this.clock.getDelta();
         if (this.flowParticles && this.flowParticles.group.visible) {
