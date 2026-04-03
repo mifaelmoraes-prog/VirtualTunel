@@ -1,14 +1,14 @@
-<#
-.SYNOPSIS
-Inicia automaticamente o ambiente de simulação "Virtual Tunel By Mifael".
+#
+#.SYNOPSIS
+#Inicia automaticamente o ambiente de simulação "Virtual Tunel By Mifael".
 
-.DESCRIPTION
-Este script:
- 0. Encerra TODOS os processos que estejam usando as portas 8000 e 5173,
-    além de matar instâncias anteriores de Python (uvicorn) e Node (vite).
- 1. Sobe o Backend FastAPI (Motor CFD em Python) na porta 8000.
- 2. Sobe o Frontend Vite (Renderizador WebGL) na porta 5173.
- 3. Aguarda o boot e abre automaticamente a URL no navegador padrão.
+#.DESCRIPTION
+#Este script:
+#0. Encerra TODOS os processos que estejam usando as portas 8000 e 5173,
+#além de matar instâncias anteriores de Python (uvicorn) e Node (vite).
+#1. Sobe o Backend FastAPI (Motor CFD em Python) na porta 8000.
+#2. Sobe o Frontend Vite (Renderizador WebGL) na porta 5173.
+#3. Aguarda o boot e abre automaticamente a URL no navegador padrão.
 #>
 
 Write-Host ""
@@ -34,24 +34,15 @@ foreach ($port in $targetPorts) {
             try {
                 Stop-Process -Id ([int]$pid) -Force -ErrorAction Stop
                 Write-Host "  ✓ Porta $port — PID $pid encerrado." -ForegroundColor DarkGray
-            } catch {
+            }
+            catch {
                 # Processo já terminou ou sem permissão — ignorar silenciosamente
             }
         }
     }
 }
 
-# Mata instâncias residuais de Python (uvicorn/backend) e Node (vite/frontend)
-$residualNames = @("python", "uvicorn", "node")
-foreach ($name in $residualNames) {
-    $procs = Get-Process -Name $name -ErrorAction SilentlyContinue
-    foreach ($proc in $procs) {
-        try {
-            Stop-Process -Id $proc.Id -Force -ErrorAction Stop
-            Write-Host "  ✓ Processo '$name' (PID $($proc.Id)) encerrado." -ForegroundColor DarkGray
-        } catch { }
-    }
-}
+
 
 Write-Host "  Aguardando o SO liberar as portas..." -ForegroundColor DarkGray
 Start-Sleep -Seconds 1
@@ -112,6 +103,3 @@ foreach ($port in $targetPorts) {
         }
     }
 }
-
-Write-Host "Concluído. Até a próxima!" -ForegroundColor Cyan
-Write-Host ""
