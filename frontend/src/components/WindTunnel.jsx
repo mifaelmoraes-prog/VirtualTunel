@@ -604,7 +604,7 @@ const WindTunnel = ({ sliceCount = 8, materialSettings = {}, showStreamlines = t
         
         <StreamlinesWithSlices sliceCount={sliceCount} showStreamlines={showStreamlines} />
         <PressureSmoke slices={slices} showPressure={showPressure} />
-        <SlicedCarModel sliceCount={sliceCount} materialSettings={{...materialSettings, carColor: "#b8966b", metalness: 0.1, roughness: 0.9}} showPressure={showPressure} />
+        <SlicedCarModel sliceCount={sliceCount} materialSettings={materialSettings} showPressure={showPressure} />
       </Canvas>
     </div>
   );
