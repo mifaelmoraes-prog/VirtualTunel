@@ -9,6 +9,10 @@
     <link crossorigin="" href="https://fonts.gstatic.com" rel="preconnect"/>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;700&family=Space+Grotesk:wght@300;500;700;900&display=swap" rel="stylesheet"/>
     <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&display=swap" rel="stylesheet"/>
+    <style>
+        .unit-active { color: #81ecff !important; font-weight: 700; }
+        .unit-pill { transition: color 0.2s ease; }
+    </style>
     
     <script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
     <script id="tailwind-config">
@@ -73,6 +77,12 @@
                 <span class="w-2 h-2 bg-secondary animate-pulse rounded-full"></span>
                 Simulation Running
             </div>
+            <!-- Unit System Toggle -->
+            <button id="btn-unit-toggle" class="flex items-center gap-0 border border-white/10 font-mono text-[10px] uppercase tracking-widest hover:border-primary/40 transition-all overflow-hidden" title="Toggle unit system">
+                <span id="unit-label-metric"   class="unit-pill unit-active px-3 py-1.5 text-[#81ecff]">SI</span>
+                <span class="text-white/20 px-0.5">|</span>
+                <span id="unit-label-imperial" class="unit-pill px-3 py-1.5 text-slate-500">IMP</span>
+            </button>
         </div>
     </header>
 
@@ -123,16 +133,16 @@
             <div class="absolute bottom-6 left-1/2 -translate-x-1/2 flex gap-4 w-[90%] max-w-4xl pointer-events-none">
                 <div class="glass-hud flex-1 p-3 flex flex-col h-32 border border-white/5 pointer-events-auto">
                     <div class="flex justify-between items-center mb-2">
-                        <span class="text-[10px] font-bold uppercase tracking-tighter text-primary">Downforce / Drag (N)</span>
+                        <span id="label-df-drag-header" class="text-[10px] font-bold uppercase tracking-tighter text-primary">Downforce / Drag (N)</span>
                         <span id="val-eff" class="text-[10px] font-mono text-white">Eff: 0.00</span>
                     </div>
                     <div class="flex-1 flex flex-col gap-2 justify-center">
                         <div>
-                            <div class="flex justify-between text-[10px] font-mono mb-1"><span class="text-on-surface-variant">Downforce</span><span id="val-downforce" class="text-primary">0 N</span></div>
+                            <div class="flex justify-between text-[10px] font-mono mb-1"><span class="text-on-surface-variant">Downforce</span><span id="val-downforce" class="text-primary">0 <span id="label-downforce-unit">N</span></span></div>
                             <div class="w-full bg-surface/50 h-2"><div id="bar-downforce" class="bg-primary h-full" style="width: 0%"></div></div>
                         </div>
                         <div>
-                            <div class="flex justify-between text-[10px] font-mono mb-1"><span class="text-on-surface-variant">Drag</span><span id="val-drag" class="text-secondary">0 N</span></div>
+                            <div class="flex justify-between text-[10px] font-mono mb-1"><span class="text-on-surface-variant">Drag</span><span id="val-drag" class="text-secondary">0 <span id="label-drag-unit">N</span></span></div>
                             <div class="w-full bg-surface/50 h-2"><div id="bar-drag" class="bg-secondary h-full" style="width: 0%"></div></div>
                         </div>
                     </div>
@@ -224,6 +234,14 @@
                         <div class="flex items-center justify-between mt-4">
                             <span class="text-xs">Vortex Visualization</span>
                             <input type="checkbox" id="check-vortex" class="form-checkbox bg-surface-container border-outline-variant text-secondary rounded-none w-5 h-5 focus:ring-0">
+                        </div>
+
+                        <div class="flex items-center justify-between mt-4">
+                            <span class="text-xs flex items-center gap-1.5">
+                                <span class="inline-block w-3 h-0.5 bg-gradient-to-r from-red-500 to-cyan-400"></span>
+                                Flow Arrows
+                            </span>
+                            <input type="checkbox" id="check-flow-arrows" checked class="form-checkbox bg-surface-container border-outline-variant text-secondary rounded-none w-5 h-5 focus:ring-0">
                         </div>
                     </div>
 
@@ -352,7 +370,7 @@
                                     <th class="px-6 py-2 font-bold">Coord Y</th>
                                     <th class="px-6 py-2 font-bold">Coord Z</th>
                                     <th class="px-6 py-2 font-bold">Status</th>
-                                    <th class="px-6 py-2 font-bold text-right">Pressure (Pa)</th>
+                                    <th id="sensor-pressure-header" class="px-6 py-2 font-bold text-right">Pressure (Pa)</th>
                                 </tr>
                             </thead>
                             <tbody id="sensor-table-body" class="text-[11px] font-mono divide-y divide-white/5">

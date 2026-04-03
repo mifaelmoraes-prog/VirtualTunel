@@ -21,6 +21,16 @@ class AerodynamicTraces {
         }
     }
 
+    // Adapter for simple coordinate arrays (mock/initial streamlines)
+    updateStreamlines(coordPaths) {
+        const paths = coordPaths.map(coords => ({
+            type: 'streamline',
+            coords: coords,
+            vels: coords.map((_, i) => this.maxVelocity * (0.5 + 0.5 * (i / coords.length)))
+        }));
+        this.updateBackendPaths(paths, this.maxVelocity);
+    }
+
     updateBackendPaths(paths, v_wind) {
         this.clear();
         if(!paths || paths.length === 0) return;
@@ -119,6 +129,130 @@ class AerodynamicTraces {
     }
 }
 
+// ─────────────────────────────────────────────
+// FLOW ARROW MANAGER
+// Spawns velocity-colored 3D ArrowHelpers on click
+// ─────────────────────────────────────────────
+class FlowArrowManager {
+    constructor(scene) {
+        this.scene = scene;
+        this.group = new THREE.Group();
+        this.scene.add(this.group);
+        this.arrows = [];    // { arrow, age, maxAge }
+        this.MAX_ARROWS = 10;
+        this.visible = true;
+    }
+
+    /**
+     * Spawn an arrow at `point` pointing in `direction` with given `speed`.
+     * @param {THREE.Vector3} point      - World-space hit point
+     * @param {THREE.Vector3} direction  - Normalised flow direction vector
+     * @param {number}        speed      - Local flow speed (m/s)
+     * @param {number}        maxSpeed   - Reference max speed for colour mapping
+     */
+    spawnArrow(point, direction, speed, maxSpeed) {
+        // FIFO: remove oldest if at cap
+        if (this.arrows.length >= this.MAX_ARROWS) {
+            const oldest = this.arrows.shift();
+            this.group.remove(oldest.arrow);
+            oldest.arrow.line.geometry.dispose();
+            oldest.arrow.cone.geometry.dispose();
+        }
+
+        // Colour: slow = red (0°), fast = cyan (190°) in HSL
+        const t = Math.min(1.0, Math.max(0.0, speed / maxSpeed));
+        const hue = t * 0.52;   // 0.0 (red) → 0.52 (cyan)
+        const color = new THREE.Color().setHSL(hue, 1.0, 0.55);
+
+        // Length: 0.6 (slow) → 3.2 (fast)
+        const length = 0.6 + t * 2.6;
+        const headLength = length * 0.28;
+        const headWidth  = headLength * 0.5;
+
+        const arrow = new THREE.ArrowHelper(
+            direction.clone().normalize(),
+            point,
+            length,
+            color,
+            headLength,
+            headWidth
+        );
+
+        // Semi-transparent
+        arrow.line.material.transparent = true;
+        arrow.cone.material.transparent = true;
+        arrow.line.material.opacity = 0.92;
+        arrow.cone.material.opacity = 0.92;
+
+        this.group.add(arrow);
+        this.arrows.push({ arrow, age: 0, maxAge: 4.0 }); // 4s lifetime
+    }
+
+    clear() {
+        for (const { arrow } of this.arrows) {
+            this.group.remove(arrow);
+            arrow.line.geometry.dispose();
+            arrow.cone.geometry.dispose();
+        }
+        this.arrows = [];
+    }
+
+    /** Called every frame with deltaTime */
+    update(dt) {
+        const toRemove = [];
+        for (const entry of this.arrows) {
+            entry.age += dt;
+            const frac = entry.age / entry.maxAge;
+            const opacity = Math.max(0, 1.0 - frac);
+            entry.arrow.line.material.opacity = opacity * 0.92;
+            entry.arrow.cone.material.opacity = opacity * 0.92;
+            if (frac >= 1.0) toRemove.push(entry);
+        }
+        for (const entry of toRemove) {
+            this.group.remove(entry.arrow);
+            entry.arrow.line.geometry.dispose();
+            entry.arrow.cone.geometry.dispose();
+            this.arrows.splice(this.arrows.indexOf(entry), 1);
+        }
+    }
+
+    setVisible(v) {
+        this.visible = v;
+        this.group.visible = v;
+    }
+}
+
+// ─────────────────────────────────────────────
+// UNIT SYSTEM
+// Singleton that converts and formats all displayed values
+// ─────────────────────────────────────────────
+const UnitSystem = {
+    mode: 'metric',   // 'metric' | 'imperial'
+
+    toggle() {
+        this.mode = this.mode === 'metric' ? 'imperial' : 'metric';
+    },
+
+    // --- converters ---
+    speed(ms)     { return this.mode === 'metric' ? ms          : ms  * 2.23694; },
+    speedUnit()   { return this.mode === 'metric' ? 'm/s'       : 'mph'; },
+
+    force(N)      { return this.mode === 'metric' ? N           : N   / 4.44822; },
+    forceUnit()   { return this.mode === 'metric' ? 'N'         : 'lbf'; },
+
+    pressure(Pa)  { return this.mode === 'metric' ? Pa          : Pa  / 249.089; },
+    pressureUnit(){ return this.mode === 'metric' ? 'Pa'        : 'inH\u2082O'; },
+
+    kmh(kmh)      { return this.mode === 'metric' ? kmh         : kmh * 0.621371; },
+    kmhUnit()     { return this.mode === 'metric' ? 'km/h'      : 'mph'; },
+
+    // --- formatters ---
+    fmtSpeed(ms, dec=1)    { return `${this.speed(ms).toFixed(dec)} ${this.speedUnit()}`; },
+    fmtForce(N,  dec=2)    { return `${this.force(N).toFixed(dec)} ${this.forceUnit()}`; },
+    fmtPressure(Pa, dec=2) { return `${this.pressure(Pa).toFixed(dec)} ${this.pressureUnit()}`; },
+    fmtKmh(kmh, dec=1)     { return `${this.kmh(kmh).toFixed(dec)} ${this.kmhUnit()}`; },
+};
+
 class WindTunnelApp {
     constructor() {
         this.container = document.getElementById('three-container');
@@ -142,6 +276,12 @@ class WindTunnelApp {
 
         this.currentModelId = 'default';
         this.probeLocked = false;
+
+        // Cached raw metric values for unit conversion
+        this._rawMetrics = null;
+        this._rawProbeP = null;
+        this._rawProbeU = null;
+        this._rawSpeedGain = null;
         
         this.init();
         this.animate();
@@ -188,6 +328,7 @@ class WindTunnelApp {
         this.createCar();
         this.createProbeMarker();
         this.flowParticles = new AerodynamicTraces(this.scene);
+        this.flowArrows = new FlowArrowManager(this.scene);
         
         this.flowParticles.updateStreamlines(this.generateMockPaths());
 
@@ -202,7 +343,7 @@ class WindTunnelApp {
         if (velocitySlider) {
             velocitySlider.addEventListener('input', (e) => {
                 this.v_wind = parseFloat(e.target.value);
-                velocityVal.innerText = `${this.v_wind.toFixed(1)} M/S`;
+                velocityVal.innerText = UnitSystem.fmtSpeed(this.v_wind).toUpperCase();
             });
         }
         
@@ -254,8 +395,25 @@ class WindTunnelApp {
         });
 
         document.getElementById('check-vortex')?.addEventListener('change', (e) => {
-            if(this.flowParticles) this.flowParticles.vortexGroup.visible = e.target.checked;
+            // vortex particles are part of the main particle cloud — toggle the whole group
+            if(this.flowParticles) this.flowParticles.group.visible = e.target.checked;
         });
+
+        document.getElementById('check-flow-arrows')?.addEventListener('change', (e) => {
+            if(this.flowArrows) this.flowArrows.setVisible(e.target.checked);
+        });
+
+        // Unit system toggle
+        const btnUnit = document.getElementById('btn-unit-toggle');
+        if (btnUnit) {
+            btnUnit.addEventListener('click', () => {
+                UnitSystem.toggle();
+                this._refreshAllUnits();
+                // Update button labels
+                document.getElementById('unit-label-metric').classList.toggle('unit-active', UnitSystem.mode === 'metric');
+                document.getElementById('unit-label-imperial').classList.toggle('unit-active', UnitSystem.mode === 'imperial');
+            });
+        }
 
         // Navigation system
         document.getElementById('nav-models').addEventListener('click', () => this.switchView('models'));
@@ -325,10 +483,11 @@ class WindTunnelApp {
         const delta = metrics.delta_time;
         const color = delta < 0 ? '#00ffaa' : '#ff4444';
         const sign = delta < 0 ? '' : '+';
+        this._rawSpeedGain = metrics.top_speed_gain;
         
         document.getElementById('perf-lap-delta').innerText = `${sign}${delta.toFixed(2)}s`;
         document.getElementById('perf-lap-delta').style.color = color;
-        document.getElementById('perf-speed-gain').innerText = `${metrics.top_speed_gain.toFixed(1)} km/h`;
+        document.getElementById('perf-speed-gain').innerText = UnitSystem.fmtKmh(metrics.top_speed_gain);
     }
 
     drawTrackMap(telemetry) {
@@ -548,6 +707,7 @@ class WindTunnelApp {
             
             if (data.status === 'success') {
                 this.simData = data.metrics;
+                this._rawMetrics = data.metrics;
                 this.updateUI(data.metrics);
                 this.updateSensorsView(data.metrics);
                 this.updateHeatmap(data.metrics);
@@ -564,6 +724,8 @@ class WindTunnelApp {
                         };
                     });
                     this.flowParticles.updateBackendPaths(offsetStreamlines, this.v_wind);
+                    // Store for arrow direction sampling
+                    this._streamlines = offsetStreamlines;
                 }
                 document.getElementById('footer-status').innerText = 'SYSTEM STATUS: DATA RENDERED';
             }
@@ -611,15 +773,48 @@ class WindTunnelApp {
     }
 
     updateUI(metrics) {
-        document.getElementById('val-downforce').innerText = `${metrics.downforce.toFixed(2)} N`;
-        document.getElementById('val-drag').innerText = `${metrics.drag.toFixed(2)} N`;
+        document.getElementById('val-downforce').innerText = UnitSystem.fmtForce(metrics.downforce);
+        document.getElementById('val-drag').innerText = UnitSystem.fmtForce(metrics.drag);
         document.getElementById('val-eff').innerText = `Eff: ${metrics.efficiency.toFixed(2)}`;
-        
-        // Update bar widths
+        // Update label units
+        const dfLabel = document.getElementById('label-downforce-unit');
+        const dgLabel = document.getElementById('label-drag-unit');
+        if (dfLabel) dfLabel.innerText = UnitSystem.forceUnit();
+        if (dgLabel) dgLabel.innerText = UnitSystem.forceUnit();
+        // Update the header unit label
+        const hdrLabel = document.getElementById('label-df-drag-header');
+        if (hdrLabel) hdrLabel.innerText = `Downforce / Drag (${UnitSystem.forceUnit()})`;
+        // Update bar widths (use raw N for % calc always)
         const dfPct = Math.min(100, Math.max(0, (metrics.downforce / 500) * 100));
-        const dgPct = Math.min(100, Math.max(0, (metrics.drag / 200) * 100));
+        const dgPct = Math.min(100, Math.max(0, (metrics.drag   / 200) * 100));
         document.getElementById('bar-downforce').style.width = `${dfPct}%`;
         document.getElementById('bar-drag').style.width = `${dgPct}%`;
+    }
+
+    /** Re-renders all unit-dependent labels using cached raw metric values */
+    _refreshAllUnits() {
+        // Velocity slider label
+        const velocityVal = document.getElementById('velocity-val');
+        if (velocityVal) velocityVal.innerText = UnitSystem.fmtSpeed(this.v_wind).toUpperCase();
+        // Sim metrics
+        if (this._rawMetrics) {
+            this.updateUI(this._rawMetrics);
+            this.updateSensorsView(this._rawMetrics);
+        }
+        // Probe values
+        if (this._rawProbeP !== null && this._rawProbeU !== null) {
+            document.getElementById('probe-p').innerHTML =
+                `${UnitSystem.fmtPressure(this._rawProbeP)} <span class="text-sm">${UnitSystem.pressureUnit()}</span>`;
+            document.getElementById('probe-u').innerHTML =
+                `${UnitSystem.fmtSpeed(this._rawProbeU)} <span class="text-sm">${UnitSystem.speedUnit()}</span>`;
+        }
+        // Track speed gain
+        if (this._rawSpeedGain !== null) {
+            document.getElementById('perf-speed-gain').innerText = UnitSystem.fmtKmh(this._rawSpeedGain);
+        }
+        // Sensor table pressure column header
+        const sensorPressureHeader = document.getElementById('sensor-pressure-header');
+        if (sensorPressureHeader) sensorPressureHeader.innerText = `Pressure (${UnitSystem.pressureUnit()})`;
     }
 
     onMouseMove(event) {
@@ -631,17 +826,59 @@ class WindTunnelApp {
     onMouseClick(event) {
         this.updateMouseCoords(event);
         this.raycaster.setFromCamera(this.mouse, this.camera);
-        const intersects = this.raycaster.intersectObject(this.car);
+        // Use recursive intersect on carGroup so yaw rotation is handled correctly
+        const intersects = this.raycaster.intersectObjects([this.carGroup], true);
 
         if (intersects.length > 0) {
             this.probeLocked = !this.probeLocked;
             this.probeMarker.visible = true;
             this.probeMarker.position.copy(intersects[0].point);
             this.updateProbe();
+
+            // Spawn arrow on every click when the option is enabled
+            if (this.flowArrows && this.flowArrows.visible) {
+                const hitPoint = intersects[0].point;
+                const dir = this._sampleFlowDirection(hitPoint);
+                const speed = this._rawProbeU !== null ? this._rawProbeU : this.v_wind * 0.8;
+                this.flowArrows.spawnArrow(hitPoint, dir, speed, this.v_wind);
+            }
         } else {
             this.probeLocked = false;
             this.probeMarker.visible = false;
         }
+    }
+
+    /**
+     * Estimate local flow direction at a world-space point.
+     * Finds the nearest stream-path segment and returns the tangent at that point.
+     * Falls back to the global wind direction if no streamlines are loaded.
+     */
+    _sampleFlowDirection(point) {
+        const defaultDir = new THREE.Vector3(1, 0, 0); // wind flows in +X
+
+        if (!this._streamlines || this._streamlines.length === 0) return defaultDir;
+
+        let bestDist = Infinity;
+        let bestDir = defaultDir.clone();
+
+        for (const path of this._streamlines) {
+            const coords = path.coords;
+            for (let i = 0; i < coords.length - 1; i++) {
+                const a = new THREE.Vector3(coords[i][0],   coords[i][1],   coords[i][2]);
+                const b = new THREE.Vector3(coords[i+1][0], coords[i+1][1], coords[i+1][2]);
+                // Closest point on segment to hit point
+                const ab = b.clone().sub(a);
+                const t  = Math.max(0, Math.min(1, point.clone().sub(a).dot(ab) / ab.lengthSq()));
+                const closest = a.clone().add(ab.clone().multiplyScalar(t));
+                const dist = closest.distanceTo(point);
+                if (dist < bestDist) {
+                    bestDist = dist;
+                    bestDir  = ab.clone().normalize();
+                }
+            }
+        }
+
+        return bestDir;
     }
 
     updateMouseCoords(event) {
@@ -652,23 +889,30 @@ class WindTunnelApp {
 
     updateProbe() {
         this.raycaster.setFromCamera(this.mouse, this.camera);
-        const intersects = this.raycaster.intersectObject(this.car);
+        const intersects = this.raycaster.intersectObjects([this.carGroup], true);
         const hud = document.getElementById('probe-hud');
 
         if (intersects.length > 0) {
             hud.classList.remove('opacity-0');
             const point = intersects[0].point;
             const distFromFront = point.x - (-3);
-            const p = Math.max(-250, 180 * (1 - distFromFront/6) + (Math.sin(performance.now()*0.01) * 3));
-            const u = this.v_wind * (0.4 + 0.6 * (distFromFront/6)) ;
-            const cp = p / (0.5 * 1.225 * this.v_wind**2);
+            // Raw metric values
+            const p_Pa = Math.max(-250, 180 * (1 - distFromFront/6) + (Math.sin(performance.now()*0.01) * 3));
+            const u_ms = this.v_wind * (0.4 + 0.6 * (distFromFront/6));
+            const cp   = p_Pa / (0.5 * 1.225 * this.v_wind**2);
 
-            document.getElementById('probe-p').innerHTML = `${p.toFixed(2)} <span class="text-sm">Pa</span>`;
-            document.getElementById('probe-u').innerHTML = `${u.toFixed(2)} <span class="text-sm">m/s</span>`;
+            // Cache for unit refresh
+            this._rawProbeP = p_Pa;
+            this._rawProbeU = u_ms;
+
+            document.getElementById('probe-p').innerHTML =
+                `${UnitSystem.pressure(p_Pa).toFixed(2)} <span class="text-sm">${UnitSystem.pressureUnit()}</span>`;
+            document.getElementById('probe-u').innerHTML =
+                `${UnitSystem.speed(u_ms).toFixed(2)} <span class="text-sm">${UnitSystem.speedUnit()}</span>`;
             document.getElementById('probe-cp').innerText = `Cp: ${cp.toFixed(2)}`;
             
-            // Also sync to Sensores macro gauge
-            document.getElementById('sensor-val-pressure').innerText = p.toFixed(1);
+            // Also sync to Sensores macro gauge (always Pa for raw data)
+            document.getElementById('sensor-val-pressure').innerText = UnitSystem.pressure(p_Pa).toFixed(1);
             
             if (this.probeLocked) {
                 document.getElementById('probe-title').innerText = "PROBE DATA (LOCKED)";
@@ -704,6 +948,11 @@ class WindTunnelApp {
         const dt = this.clock.getDelta();
         if (this.flowParticles && this.flowParticles.group.visible) {
             this.flowParticles.updateParticles(dt, this.loopDuration);
+        }
+
+        // Update flow arrow fade-outs
+        if (this.flowArrows) {
+            this.flowArrows.update(dt);
         }
 
         this.controls.update();
