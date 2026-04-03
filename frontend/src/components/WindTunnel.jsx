@@ -1,35 +1,234 @@
 import React, { useRef, useMemo } from 'react';
 import { Canvas, useFrame } from '@react-three/fiber';
-import { OrbitControls, PerspectiveCamera, Stars } from '@react-three/drei';
+import { OrbitControls, PerspectiveCamera } from '@react-three/drei';
 import * as THREE from 'three';
 
 const MODEL_PROFILE = [
-  { x: -2.0, y: 0.3, z: 0.8 },
-  { x: -1.8, y: 0.4, z: 0.9 },
-  { x: -1.5, y: 0.5, z: 1.0 },
-  { x: -1.2, y: 0.6, z: 1.05 },
-  { x: -0.8, y: 0.7, z: 1.1 },
-  { x: -0.5, y: 0.9, z: 1.15 },
-  { x: -0.2, y: 1.1, z: 1.2 },
-  { x: 0.0, y: 1.2, z: 1.2 },
-  { x: 0.3, y: 1.15, z: 1.2 },
-  { x: 0.6, y: 1.1, z: 1.15 },
-  { x: 0.9, y: 1.0, z: 1.1 },
-  { x: 1.2, y: 0.85, z: 1.0 },
-  { x: 1.5, y: 0.7, z: 0.9 },
-  { x: 1.8, y: 0.5, z: 0.8 },
-  { x: 2.0, y: 0.35, z: 0.75 },
+  { x: -2.0, y: 0.3, z: 0.8, pressure: 0.3 },
+  { x: -1.8, y: 0.4, z: 0.9, pressure: 0.2 },
+  { x: -1.5, y: 0.5, z: 1.0, pressure: 0.1 },
+  { x: -1.2, y: 0.6, z: 1.05, pressure: 0.0 },
+  { x: -0.8, y: 0.7, z: 1.1, pressure: -0.1 },
+  { x: -0.5, y: 0.9, z: 1.15, pressure: -0.2 },
+  { x: -0.2, y: 1.1, z: 1.2, pressure: -0.15 },
+  { x: 0.0, y: 1.2, z: 1.2, pressure: -0.1 },
+  { x: 0.3, y: 1.15, z: 1.2, pressure: 0.1 },
+  { x: 0.6, y: 1.1, z: 1.15, pressure: 0.3 },
+  { x: 0.9, y: 1.0, z: 1.1, pressure: 0.5 },
+  { x: 1.2, y: 0.85, z: 1.0, pressure: 0.7 },
+  { x: 1.5, y: 0.7, z: 0.9, pressure: 0.8 },
+  { x: 1.8, y: 0.5, z: 0.8, pressure: 0.9 },
+  { x: 2.0, y: 0.35, z: 0.75, pressure: 0.95 },
 ];
 
 const getVelocityColor = (velocity, maxVelocity) => {
   const t = Math.max(0, Math.min(1, velocity / maxVelocity));
-  const r = 1 - t;
-  const g = t * 0.3;
-  const b = t;
-  return new THREE.Color(r, g, b);
+  const white = new THREE.Color(1, 1, 1);
+  const lightBlue = new THREE.Color(0.8, 0.9, 1.0);
+  return white.lerp(lightBlue, t);
 };
 
-const SlicedCarModel = ({ sliceCount }) => {
+const PressureSmoke = ({ slices, showPressure }) => {
+  const particlesRef = useRef();
+  const particleCount = 1200;
+  
+  const { positions, colors, opacities, sizes, velocities, life } = useMemo(() => {
+    const pos = new Float32Array(particleCount * 3);
+    const col = new Float32Array(particleCount * 3);
+    const opa = new Float32Array(particleCount);
+    const siz = new Float32Array(particleCount);
+    const vel = new Float32Array(particleCount * 3);
+    const lf = new Float32Array(particleCount);
+    
+    for (let i = 0; i < particleCount; i++) {
+      const x = -6 + Math.random() * 1;
+      const y = Math.random() * 2.2 + 0.1;
+      const z = (Math.random() - 0.5) * 2.5;
+      
+      pos[i * 3] = x;
+      pos[i * 3 + 1] = y;
+      pos[i * 3 + 2] = z;
+      
+      vel[i * 3] = 1.2 + Math.random() * 0.3;
+      vel[i * 3 + 1] = (Math.random() - 0.5) * 0.02;
+      vel[i * 3 + 2] = (Math.random() - 0.5) * 0.02;
+      
+      opa[i] = 0;
+      siz[i] = 0.2 + Math.random() * 0.15;
+      
+      col[i * 3] = 0.95;
+      col[i * 3 + 1] = 0.95;
+      col[i * 3 + 2] = 0.98;
+      
+      lf[i] = Math.random();
+    }
+    
+    return { 
+      positions: pos, 
+      colors: col, 
+      opacities: opa, 
+      sizes: siz, 
+      velocities: vel,
+      life: lf
+    };
+  }, []);
+  
+  useFrame((state) => {
+    if (!particlesRef.current || !showPressure) return;
+    
+    const positionAttr = particlesRef.current.geometry.attributes.position;
+    const colorAttr = particlesRef.current.geometry.attributes.color;
+    const opacityAttr = particlesRef.current.geometry.attributes.opacity;
+    const sizeAttr = particlesRef.current.geometry.attributes.size;
+    
+    const time = state.clock.getElapsedTime();
+    
+    for (let i = 0; i < particleCount; i++) {
+      let x = positionAttr.array[i * 3];
+      let y = positionAttr.array[i * 3 + 1];
+      let z = positionAttr.array[i * 3 + 2];
+      
+      life[i] += 0.008;
+      
+      if (life[i] > 1 || x > 5) {
+        x = -6;
+        y = Math.random() * 2.2 + 0.1;
+        z = (Math.random() - 0.5) * 2.5;
+        life[i] = 0;
+      }
+      
+      let turbulence = 0;
+      let nearCar = false;
+      
+      for (const slice of slices) {
+        const distX = x - slice.x;
+        const distZ = Math.abs(z);
+        
+        if (Math.abs(distX) < 1.5 && distZ < slice.z + 0.5 && y < slice.y + 0.5) {
+          nearCar = true;
+          
+          const localTurb = (1 - Math.abs(distX) / 1.5) * (1 - distZ / (slice.z + 0.5));
+          turbulence = Math.max(turbulence, localTurb);
+          
+          if (distZ < slice.z + 0.15 && y < slice.y + 0.1) {
+            if (z >= 0) {
+              z = slice.z + 0.2 + (1 - Math.abs(distX) / 1.5) * 0.1;
+            } else {
+              z = -slice.z - 0.2 - (1 - Math.abs(distX) / 1.5) * 0.1;
+            }
+            y = Math.max(y, slice.y + 0.15);
+          }
+        }
+      }
+      
+      x += velocities[i * 3] * 0.016;
+      y += velocities[i * 3 + 1] * 0.016 + turbulence * 0.01;
+      z += velocities[i * 3 + 2] * 0.016 + (Math.random() - 0.5) * turbulence * 0.02;
+      
+      positionAttr.array[i * 3] = x;
+      positionAttr.array[i * 3 + 1] = y;
+      positionAttr.array[i * 3 + 2] = z;
+      
+      const lifeFade = 1 - life[i];
+      const baseOpacity = nearCar ? 0.15 : 0.06;
+      const turbOpacity = turbulence * 0.25;
+      opacityAttr.array[i] = (baseOpacity + turbOpacity) * lifeFade;
+      
+      const laminarR = 0.95;
+      const laminarG = 0.95;
+      const laminarB = 0.98;
+      const turbR = 0.85;
+      const turbG = 0.8;
+      const turbB = 0.75;
+      
+      colorAttr.array[i * 3] = laminarR + (turbR - laminarR) * turbulence;
+      colorAttr.array[i * 3 + 1] = laminarG + (turbG - laminarG) * turbulence;
+      colorAttr.array[i * 3 + 2] = laminarB + (turbB - laminarB) * turbulence;
+      
+      sizeAttr.array[i] = (0.15 + turbulence * 0.1) * lifeFade;
+    }
+    
+    positionAttr.needsUpdate = true;
+    colorAttr.needsUpdate = true;
+    opacityAttr.needsUpdate = true;
+    sizeAttr.needsUpdate = true;
+  });
+  
+  if (!showPressure) return null;
+  
+  return (
+    <points ref={particlesRef}>
+      <bufferGeometry>
+        <bufferAttribute
+          attach="attributes-position"
+          count={particleCount}
+          array={positions}
+          itemSize={3}
+        />
+        <bufferAttribute
+          attach="attributes-color"
+          count={particleCount}
+          array={colors}
+          itemSize={3}
+        />
+        <bufferAttribute
+          attach="attributes-opacity"
+          count={particleCount}
+          array={opacities}
+          itemSize={1}
+        />
+        <bufferAttribute
+          attach="attributes-size"
+          count={particleCount}
+          array={sizes}
+          itemSize={1}
+        />
+      </bufferGeometry>
+      <shaderMaterial
+        transparent
+        depthWrite={false}
+        blending={THREE.AdditiveBlending}
+        uniforms={{
+          uTime: { value: 0 }
+        }}
+        vertexShader={`
+          attribute float opacity;
+          attribute float size;
+          varying vec3 vColor;
+          varying float vOpacity;
+          
+          void main() {
+            vColor = color;
+            vOpacity = opacity;
+            vec4 mvPosition = modelViewMatrix * vec4(position, 1.0);
+            gl_PointSize = size * (400.0 / -mvPosition.z);
+            gl_Position = projectionMatrix * mvPosition;
+          }
+        `}
+        fragmentShader={`
+          varying vec3 vColor;
+          varying float vOpacity;
+          
+          void main() {
+            vec2 center = gl_PointCoord - vec2(0.5);
+            float dist = length(center);
+            float alpha = smoothstep(0.5, 0.1, dist) * vOpacity;
+            gl_FragColor = vec4(vColor, alpha);
+          }
+        `}
+      />
+    </points>
+  );
+};
+
+const getPressureColor = (pressure) => {
+  const t = (pressure + 1) / 2;
+  const lowPressure = new THREE.Color(0.2, 0.3, 0.9);
+  const highPressure = new THREE.Color(0.95, 0.2, 0.1);
+  return lowPressure.lerp(highPressure, t);
+};
+
+const SlicedCarModel = ({ sliceCount, materialSettings, showPressure }) => {
   const groupRef = useRef();
   
   const carShape = useMemo(() => {
@@ -66,7 +265,8 @@ const SlicedCarModel = ({ sliceCount }) => {
       result.push({
         x,
         width: profileSlice.z,
-        height: profileSlice.y
+        height: profileSlice.y,
+        pressure: profileSlice.pressure
       });
     }
     return result;
@@ -79,10 +279,15 @@ const SlicedCarModel = ({ sliceCount }) => {
   });
 
   return (
-    <group ref={groupRef}>
+    <group ref={groupRef} rotation={[0, 0, 0]}>
       <mesh rotation={[Math.PI / 2, 0, 0]} position={[0, 0.6, 0]}>
         <extrudeGeometry args={[carShape, { depth: 1.6, bevelEnabled: false }]} />
-        <meshStandardMaterial color="#1a1a2e" metalness={0.9} roughness={0.15} />
+        <meshStandardMaterial 
+          color={showPressure ? "#8866aa" : materialSettings.carColor} 
+          metalness={materialSettings.metalness} 
+          roughness={materialSettings.roughness}
+          envMapIntensity={1.5}
+        />
       </mesh>
       
       {slices.map((slice, i) => {
@@ -97,11 +302,13 @@ const SlicedCarModel = ({ sliceCount }) => {
         sliceShape.lineTo(w, 0);
         sliceShape.lineTo(-w, 0);
         
+        const pressureColor = getPressureColor(slice.pressure);
+        
         return (
           <mesh key={i} position={[slice.x, 0, 0]} rotation={[Math.PI / 2, 0, 0]}>
             <extrudeGeometry args={[sliceShape, { depth: 0.08, bevelEnabled: false }]} />
             <meshStandardMaterial 
-              color={i % 2 === 0 ? "#2a2a4e" : "#1f1f3a"} 
+              color={showPressure ? `#${pressureColor.getHexString()}` : (i % 2 === 0 ? "#2a2a4e" : "#1f1f3a")} 
               metalness={0.85} 
               roughness={0.2}
               transparent
@@ -114,7 +321,7 @@ const SlicedCarModel = ({ sliceCount }) => {
   );
 };
 
-const StreamlinesWithSlices = ({ sliceCount }) => {
+const StreamlinesWithSlices = ({ sliceCount, showStreamlines }) => {
   const lineCount = 30;
   const maxVelocity = 1.0;
   const baseSpeed = 0.2;
@@ -134,6 +341,8 @@ const StreamlinesWithSlices = ({ sliceCount }) => {
     }
     return result;
   }, [sliceCount]);
+
+  if (!showStreamlines) return null;
 
   const lineData = useMemo(() => {
     const lines = [];
@@ -253,28 +462,95 @@ const VelocityLine = ({ points, velocities, maxVelocity }) => {
   );
 };
 
-const WindTunnel = ({ sliceCount = 8 }) => {
-  return (
-    <div style={{ width: '100%', height: '100%', background: '#000' }}>
-      <Canvas>
-        <PerspectiveCamera makeDefault position={[-8, 4, 8]} />
-        <OrbitControls enableDamping dampingFactor={0.05} />
-        
-        <ambientLight intensity={0.5} />
-        <pointLight position={[10, 10, 10]} intensity={1} color="#00f2ff" />
-        <pointLight position={[-10, 10, -10]} intensity={0.5} color="#ff00ea" />
-        <directionalLight position={[0, 10, 5]} intensity={0.5} />
+const WindTunnel = ({ sliceCount = 8, materialSettings = {}, showStreamlines = true, showPressure = true }) => {
+  const slices = useMemo(() => {
+    const result = [];
+    const xMin = -2.0;
+    const xMax = 2.0;
+    const step = (xMax - xMin) / (sliceCount - 1);
 
-        <Stars radius={100} depth={50} count={5000} factor={4} saturation={0} fade speed={1} />
+    for (let i = 0; i < sliceCount; i++) {
+      const x = xMin + i * step;
+      const profileSlice = MODEL_PROFILE.find(p => Math.abs(p.x - x) < 0.15);
+      if (profileSlice) {
+        result.push({ x, y: profileSlice.y, z: profileSlice.z });
+      }
+    }
+    return result;
+  }, [sliceCount]);
+
+  return (
+    <div style={{ width: '100%', height: '100%', background: '#0a0a0a' }}>
+      <Canvas>
+        <fog attach="fog" args={['#0a0a0a', 8, 25]} />
+        <PerspectiveCamera makeDefault position={[-8, 4, 8]} fov={45} />
+        <OrbitControls enableDamping dampingFactor={0.05} maxPolarAngle={Math.PI / 2} />
         
-        <gridHelper args={[20, 20, '#333', '#111']} position={[0, -0.5, 0]} />
+        <ambientLight intensity={0.3} color="#404050" />
+        <spotLight 
+          position={[8, 12, 5]} 
+          intensity={1.5} 
+          color="#fff5e6" 
+          angle={0.5} 
+          penumbra={0.5}
+          castShadow 
+        />
+        <spotLight 
+          position={[-8, 10, -5]} 
+          intensity={0.8} 
+          color="#aaccff" 
+          angle={0.6} 
+          penumbra={0.8}
+        />
+        <pointLight position={[0, 5, 0]} intensity={0.4} color="#ff8844" />
         
-        <StreamlinesWithSlices sliceCount={sliceCount} />
-        <SlicedCarModel sliceCount={sliceCount} />
+        <mesh position={[0, -0.5, 0]} receiveShadow>
+          <planeGeometry args={[30, 30]} />
+          <meshStandardMaterial color="#1a1a1a" roughness={0.9} metalness={0.1} />
+        </mesh>
         
-        <mesh position={[0, -0.5, 0]} rotation={[-Math.PI / 2, 0, 0]}>
-          <planeGeometry args={[20, 20]} />
-          <meshStandardMaterial color="#05070a" transparent opacity={0.8} />
+        <mesh position={[-15, 5, 0]}>
+          <planeGeometry args={[0.2, 12, 20, 20]} />
+          <meshStandardMaterial color="#222" roughness={0.95} />
+        </mesh>
+        
+        <mesh position={[15, 5, 0]}>
+          <planeGeometry args={[0.2, 12, 20, 20]} />
+          <meshStandardMaterial color="#222" roughness={0.95} />
+        </mesh>
+        
+        <mesh position={[0, 11, 0]} rotation={[Math.PI / 2, 0, 0]}>
+          <planeGeometry args={[30, 30]} />
+          <meshStandardMaterial color="#181818" roughness={0.95} />
+        </mesh>
+        
+        <group>
+          {[-12, -8, -4, 4, 8, 12].map((x, i) => (
+            <group key={i} position={[x, 0, 12]}>
+              <mesh>
+                <cylinderGeometry args={[0.08, 0.08, 4, 8]} />
+                <meshStandardMaterial color="#333" metalness={0.8} roughness={0.3} />
+              </mesh>
+              <pointLight position={[0, 3.5, 0]} intensity={0.5} color="#ffaa66" distance={5} />
+            </group>
+          ))}
+        </group>
+        
+        <StreamlinesWithSlices sliceCount={sliceCount} showStreamlines={showStreamlines} />
+        <PressureSmoke slices={slices} showPressure={showPressure} />
+        <SlicedCarModel sliceCount={sliceCount} materialSettings={materialSettings} showPressure={showPressure} />
+        
+        <mesh position={[0, -0.48, 0]} rotation={[-Math.PI / 2, 0, 0]}>
+          <planeGeometry args={[20, 10]} />
+          <meshStandardMaterial color="#22220a" roughness={0.8} />
+        </mesh>
+        <mesh position={[-8, -0.45, 3]} rotation={[0, 0, 0]}>
+          <boxGeometry args={[0.3, 0.1, 2]} />
+          <meshStandardMaterial color="#ccaa00" />
+        </mesh>
+        <mesh position={[-8, -0.42, 3]} rotation={[0, 0, 0]}>
+          <boxGeometry args={[0.3, 0.02, 2]} />
+          <meshStandardMaterial color="#000" />
         </mesh>
       </Canvas>
     </div>
