@@ -462,6 +462,63 @@ const VelocityLine = ({ points, velocities, maxVelocity }) => {
   );
 };
 
+const Turbine = () => {
+  const hubRef = useRef();
+  
+  useFrame(({ clock }) => {
+    if (hubRef.current) {
+      hubRef.current.rotation.z = clock.getElapsedTime() * 2;
+    }
+  });
+
+  return (
+    <group position={[-14, 4, -3]} rotation={[0, 0, Math.PI / 2]}>
+      <mesh>
+        <cylinderGeometry args={[0.8, 0.8, 2, 16]} />
+        <meshStandardMaterial color="#2a2a2a" metalness={0.9} roughness={0.3} />
+      </mesh>
+      <group ref={hubRef}>
+        {[0, 60, 120, 180, 240, 300].map((angle, i) => (
+          <mesh key={i} position={[Math.cos(Math.PI * angle / 180) * 2.5, Math.sin(Math.PI * angle / 180) * 2.5, 0]} rotation={[0, 0, angle]}>
+            <boxGeometry args={[4, 0.3, 0.1]} />
+            <meshStandardMaterial color="#333" metalness={0.7} roughness={0.4} />
+          </mesh>
+        ))}
+      </group>
+      <mesh position={[1.2, 0, 0]}>
+        <cylinderGeometry args={[2, 2.5, 1.5, 32]} />
+        <meshStandardMaterial color="#1a1a1a" metalness={0.8} roughness={0.5} />
+      </mesh>
+    </group>
+  );
+};
+
+const SafetyMarking = ({ startX, width }) => {
+  return (
+    <group>
+      {Array.from({ length: Math.floor(width / 0.4) }).map((_, i) => (
+        <mesh key={i} position={[startX + i * 0.4 + 0.2, -0.47, 0]} rotation={[-Math.PI / 2, 0, 0]}>
+          <planeGeometry args={[0.2, 8]} />
+          <meshStandardMaterial color={i % 2 === 0 ? "#ccaa00" : "#111111"} />
+        </mesh>
+      ))}
+    </group>
+  );
+};
+
+const AcousticPanels = () => {
+  return (
+    <group>
+      {[-12, -8, -4, 4, 8, 12].map((x, i) => (
+        <mesh key={i} position={[x, 5, -10]}>
+          <planeGeometry args={[3, 8, 8, 8]} />
+          <meshStandardMaterial color="#2a2a2e" roughness={0.95} />
+        </mesh>
+      ))}
+    </group>
+  );
+};
+
 const WindTunnel = ({ sliceCount = 8, materialSettings = {}, showStreamlines = true, showPressure = true }) => {
   const slices = useMemo(() => {
     const result = [];
@@ -482,76 +539,72 @@ const WindTunnel = ({ sliceCount = 8, materialSettings = {}, showStreamlines = t
   return (
     <div style={{ width: '100%', height: '100%', background: '#0a0a0a' }}>
       <Canvas>
-        <fog attach="fog" args={['#0a0a0a', 8, 25]} />
-        <PerspectiveCamera makeDefault position={[-8, 4, 8]} fov={45} />
+        <fog attach="fog" args={['#0d0d0d', 12, 35]} />
+        <PerspectiveCamera makeDefault position={[-10, 5, 10]} fov={50} />
         <OrbitControls enableDamping dampingFactor={0.05} maxPolarAngle={Math.PI / 2} />
         
-        <ambientLight intensity={0.3} color="#404050" />
+        <ambientLight intensity={0.2} color="#303040" />
         <spotLight 
-          position={[8, 12, 5]} 
-          intensity={1.5} 
+          position={[8, 14, 6]} 
+          intensity={2.0} 
           color="#fff5e6" 
-          angle={0.5} 
-          penumbra={0.5}
+          angle={0.4} 
+          penumbra={0.4}
           castShadow 
+          shadow-mapSize={[2048, 2048]}
         />
         <spotLight 
-          position={[-8, 10, -5]} 
-          intensity={0.8} 
+          position={[-10, 12, -6]} 
+          intensity={1.0} 
           color="#aaccff" 
-          angle={0.6} 
-          penumbra={0.8}
+          angle={0.5} 
+          penumbra={0.7}
         />
-        <pointLight position={[0, 5, 0]} intensity={0.4} color="#ff8844" />
+        <pointLight position={[0, 6, 0]} intensity={0.5} color="#ff6633" />
+        <spotLight position={[0, 8, 8]} intensity={0.8} color="#ffffff" angle={0.6} penumbra={0.8} />
         
         <mesh position={[0, -0.5, 0]} receiveShadow>
-          <planeGeometry args={[30, 30]} />
-          <meshStandardMaterial color="#1a1a1a" roughness={0.9} metalness={0.1} />
+          <planeGeometry args={[40, 40]} />
+          <meshStandardMaterial color="#0f0f0f" roughness={0.95} metalness={0.1} />
+        </mesh>
+        <SafetyMarking startX={-6} width={16} />
+        
+        <mesh position={[-18, 6, 0]}>
+          <planeGeometry args={[0.3, 14, 20, 20]} />
+          <meshStandardMaterial color="#1a1a1e" roughness={0.95} />
         </mesh>
         
-        <mesh position={[-15, 5, 0]}>
-          <planeGeometry args={[0.2, 12, 20, 20]} />
-          <meshStandardMaterial color="#222" roughness={0.95} />
+        <mesh position={[18, 6, 0]}>
+          <planeGeometry args={[0.3, 14, 20, 20]} />
+          <meshStandardMaterial color="#1a1a1e" roughness={0.95} />
         </mesh>
         
-        <mesh position={[15, 5, 0]}>
-          <planeGeometry args={[0.2, 12, 20, 20]} />
-          <meshStandardMaterial color="#222" roughness={0.95} />
+        <mesh position={[0, 13, 0]} rotation={[Math.PI / 2, 0, 0]}>
+          <planeGeometry args={[40, 40]} />
+          <meshStandardMaterial color="#0a0a0c" roughness={0.95} />
         </mesh>
         
-        <mesh position={[0, 11, 0]} rotation={[Math.PI / 2, 0, 0]}>
-          <planeGeometry args={[30, 30]} />
-          <meshStandardMaterial color="#181818" roughness={0.95} />
-        </mesh>
+        <AcousticPanels />
+        <Turbine />
         
-        <group>
-          {[-12, -8, -4, 4, 8, 12].map((x, i) => (
-            <group key={i} position={[x, 0, 12]}>
-              <mesh>
-                <cylinderGeometry args={[0.08, 0.08, 4, 8]} />
-                <meshStandardMaterial color="#333" metalness={0.8} roughness={0.3} />
-              </mesh>
-              <pointLight position={[0, 3.5, 0]} intensity={0.5} color="#ffaa66" distance={5} />
-            </group>
-          ))}
+        <group position={[-8, -0.4, 10]}>
+          <mesh>
+            <cylinderGeometry args={[0.1, 0.1, 5, 8]} />
+            <meshStandardMaterial color="#333" metalness={0.8} roughness={0.3} />
+          </mesh>
+          <pointLight position={[0, 4, 0]} intensity={0.6} color="#ffaa66" distance={6} />
+        </group>
+        <group position={[8, -0.4, 10]}>
+          <mesh>
+            <cylinderGeometry args={[0.1, 0.1, 5, 8]} />
+            <meshStandardMaterial color="#333" metalness={0.8} roughness={0.3} />
+          </mesh>
+          <pointLight position={[0, 4, 0]} intensity={0.6} color="#ffaa66" distance={6} />
         </group>
         
         <StreamlinesWithSlices sliceCount={sliceCount} showStreamlines={showStreamlines} />
         <PressureSmoke slices={slices} showPressure={showPressure} />
-        <SlicedCarModel sliceCount={sliceCount} materialSettings={materialSettings} showPressure={showPressure} />
-        
-        <mesh position={[0, -0.48, 0]} rotation={[-Math.PI / 2, 0, 0]}>
-          <planeGeometry args={[20, 10]} />
-          <meshStandardMaterial color="#22220a" roughness={0.8} />
-        </mesh>
-        <mesh position={[-8, -0.45, 3]} rotation={[0, 0, 0]}>
-          <boxGeometry args={[0.3, 0.1, 2]} />
-          <meshStandardMaterial color="#ccaa00" />
-        </mesh>
-        <mesh position={[-8, -0.42, 3]} rotation={[0, 0, 0]}>
-          <boxGeometry args={[0.3, 0.02, 2]} />
-          <meshStandardMaterial color="#000" />
-        </mesh>
+        <SlicedCarModel sliceCount={sliceCount} materialSettings={{...materialSettings, carColor: "#b8966b", metalness: 0.1, roughness: 0.9}} showPressure={showPressure} />
       </Canvas>
     </div>
   );
