@@ -41,7 +41,7 @@ const PressureSmoke = ({ slices, showPressure }) => {
     const lf = new Float32Array(particleCount);
     
     for (let i = 0; i < particleCount; i++) {
-      const x = -6 + Math.random() * 1;
+      const x = 6 - Math.random() * 1;
       const y = Math.random() * 2.2 + 0.1;
       const z = (Math.random() - 0.5) * 2.5;
       
@@ -49,7 +49,7 @@ const PressureSmoke = ({ slices, showPressure }) => {
       pos[i * 3 + 1] = y;
       pos[i * 3 + 2] = z;
       
-      vel[i * 3] = 1.2 + Math.random() * 0.3;
+      vel[i * 3] = -1.2 - Math.random() * 0.3;
       vel[i * 3 + 1] = (Math.random() - 0.5) * 0.02;
       vel[i * 3 + 2] = (Math.random() - 0.5) * 0.02;
       
@@ -90,8 +90,8 @@ const PressureSmoke = ({ slices, showPressure }) => {
       
       life[i] += 0.008;
       
-      if (life[i] > 1 || x > 5) {
-        x = -6;
+      if (life[i] > 1 || x < -5) {
+        x = 6;
         y = Math.random() * 2.2 + 0.1;
         z = (Math.random() - 0.5) * 2.5;
         life[i] = 0;
@@ -233,21 +233,21 @@ const SlicedCarModel = ({ sliceCount, materialSettings, showPressure }) => {
   
   const carShape = useMemo(() => {
     const shape = new THREE.Shape();
-    shape.moveTo(-1.8, 0.2);
-    shape.lineTo(-1.6, 0.25);
-    shape.lineTo(-1.2, 0.35);
-    shape.lineTo(-0.8, 0.5);
-    shape.lineTo(-0.4, 0.75);
+    shape.moveTo(1.8, 0.2);
+    shape.lineTo(1.6, 0.25);
+    shape.lineTo(1.2, 0.35);
+    shape.lineTo(0.8, 0.5);
+    shape.lineTo(0.4, 0.75);
     shape.lineTo(0.0, 1.0);
-    shape.lineTo(0.4, 1.15);
-    shape.lineTo(0.7, 1.2);
-    shape.lineTo(1.0, 1.15);
-    shape.lineTo(1.3, 1.0);
-    shape.lineTo(1.6, 0.75);
-    shape.lineTo(1.8, 0.5);
-    shape.lineTo(1.9, 0.35);
-    shape.lineTo(1.9, 0.2);
-    shape.lineTo(-1.8, 0.2);
+    shape.lineTo(-0.4, 1.15);
+    shape.lineTo(-0.7, 1.2);
+    shape.lineTo(-1.0, 1.15);
+    shape.lineTo(-1.3, 1.0);
+    shape.lineTo(-1.6, 0.75);
+    shape.lineTo(-1.8, 0.5);
+    shape.lineTo(-1.9, 0.35);
+    shape.lineTo(-1.9, 0.2);
+    shape.lineTo(1.8, 0.2);
     return shape;
   }, []);
 
@@ -272,15 +272,9 @@ const SlicedCarModel = ({ sliceCount, materialSettings, showPressure }) => {
     return result;
   }, [sliceCount]);
 
-  useFrame(({ clock }) => {
-    if (groupRef.current) {
-      groupRef.current.rotation.y = Math.sin(clock.getElapsedTime() * 0.3) * 0.1;
-    }
-  });
-
   return (
-    <group ref={groupRef} rotation={[0, 0, 0]}>
-      <mesh rotation={[Math.PI / 2, 0, 0]} position={[0, 0.6, 0]}>
+    <group ref={groupRef}>
+      <mesh position={[0, 0.5, 0]}>
         <extrudeGeometry args={[carShape, { depth: 1.6, bevelEnabled: false }]} />
         <meshStandardMaterial 
           color={showPressure ? "#8866aa" : materialSettings.carColor} 
@@ -305,7 +299,7 @@ const SlicedCarModel = ({ sliceCount, materialSettings, showPressure }) => {
         const pressureColor = getPressureColor(slice.pressure);
         
         return (
-          <mesh key={i} position={[slice.x, 0, 0]} rotation={[Math.PI / 2, 0, 0]}>
+          <mesh key={i} position={[slice.x, 0, 0]} rotation={[0, 0, 0]}>
             <extrudeGeometry args={[sliceShape, { depth: 0.08, bevelEnabled: false }]} />
             <meshStandardMaterial 
               color={showPressure ? `#${pressureColor.getHexString()}` : (i % 2 === 0 ? "#2a2a4e" : "#1f1f3a")} 
@@ -358,12 +352,12 @@ const StreamlinesWithSlices = ({ sliceCount, showStreamlines }) => {
       
       let currentY = yStart;
       let currentZ = zStart;
-      let prevX = -6;
+      let prevX = 6;
       let prevY = currentY;
       let prevZ = currentZ;
       
       for (let j = 0; j < 60; j++) {
-        const x = -6 + j * 0.2;
+        const x = 6 - j * 0.2;
         
         let speedFactor = 1.0;
         
@@ -408,7 +402,7 @@ const StreamlinesWithSlices = ({ sliceCount, showStreamlines }) => {
   }, [slices]);
 
   return (
-    <group>
+    <group rotation={[0, Math.PI, 0]}>
       {lineData.map((line, i) => (
         <VelocityLine key={i} points={line.points} velocities={line.velocities} maxVelocity={maxVelocity} />
       ))}
