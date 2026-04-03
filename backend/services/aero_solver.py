@@ -11,7 +11,7 @@ class AeroSolver:
     def __init__(self, rho=1.225):
         self.rho = rho # Air density at sea level (kg/m3)
 
-    def solve(self, mesh_path, v_wind=20.0, moving_ground=True, output_path="data/results.vtp"):
+    def solve(self, mesh_path, v_wind=20.0, yaw=0.0, resolution=20, moving_ground=True, output_path="data/results.vtp"):
         """
         Executes the simulation on the provided mesh.
         """
@@ -20,6 +20,10 @@ class AeroSolver:
             
         # load volume or surface mesh
         mesh = pv.read(mesh_path)
+        
+        # Apply incoming yaw to mesh
+        if yaw != 0.0:
+            mesh.rotate_z(yaw, inplace=True)
         
         # 1. Setup flow field
         # U = Velocity vector field
@@ -61,33 +65,60 @@ class AeroSolver:
         mesh.point_data["Cp"] = p_vals / (0.5 * self.rho * v_wind**2)
         mesh.save(output_path)
 
-        # 6. Generate Streamlines for Frontend Visualization
-        # Create a source for streamlines (Inlet plane at x=min - 5)
+        # 6. Generate Streamlines & Vortices Array for Frontend Player
         inlet_x = np.min(points[:, 0]) - 5
-        seeds = pv.Plane(center=(inlet_x, 0, height/2 if 'height' in locals() else 0.5), 
-                         direction=(1, 0, 0), 
-                         i_size=10, j_size=10, 
-                         i_resolution=10, j_resolution=10)
+        streamline_data = []
         
-        # Using analytical flow field for streamlines for smoother particle motion
-        # This mocks how air flows around the body
-        streamline_points = []
-        for i in range(20): # Generate 20 streamline paths
+        for i in range(int(resolution)):
             y = (np.random.rand() - 0.5) * 8
             z = (np.random.rand() - 0.5) * 8
             path = []
-            for x in np.linspace(inlet_x, np.max(points[:, 0]) + 15, 50):
-                # Simple deflection logic: air pushes up/around the body center
+            vels = []
+            for x in np.linspace(inlet_x, np.max(points[:, 0]) + 15, 60):
                 dist_to_obj = np.sqrt((x - center[0])**2 + (y - center[1])**2 + (z - center[2])**2)
                 deflection = np.exp(-dist_to_obj/3) * 2
-                path.append([x, y + deflection * 0.5, z + deflection])
-            streamline_points.append(path)
+                
+                local_vel = v_wind * (1.0 - np.exp(-dist_to_obj/2))
+                if local_vel < v_wind * 0.1: local_vel = v_wind * 0.1
+                
+                cross_push = np.sin(np.radians(yaw)) * (x - inlet_x) * 0.1
+                
+                path.append([float(x), float(y + deflection * 0.5 + cross_push), float(z + deflection)])
+                vels.append(float(local_vel))
+            streamline_data.append({"coords": path, "vels": vels, "type": "streamline"})
+            
+        # Backend native vortex generation
+        rear_x = np.max(points[:, 0])
+        for i in range(int(resolution) // 2):
+            is_left = i % 2 == 0
+            base_y = center[1] + (1.5 if is_left else -1.5)
+            base_z = center[2] + 0.5
+            
+            path = []
+            vels = []
+            
+            curr_y, curr_z = base_y, base_z
+            for x in np.linspace(rear_x, rear_x + 15, 40):
+                angular_vel = 0.2
+                sign = 1 if is_left else -1
+                dy, dz = curr_y - center[1], curr_z - center[2]
+                
+                new_dy = dy * np.cos(angular_vel*sign) - dz * np.sin(angular_vel*sign)
+                new_dz = dy * np.sin(angular_vel*sign) + dz * np.cos(angular_vel*sign)
+                
+                expand = 1.05
+                curr_y = center[1] + new_dy * expand + (np.sin(np.radians(yaw)) * (x - rear_x) * 0.2)
+                curr_z = center[2] + new_dz * expand
+                
+                path.append([float(x), float(curr_y), float(curr_z)])
+                vels.append(float(v_wind * 0.4)) # Vortices move slower
+            streamline_data.append({"coords": path, "vels": vels, "type": "vortex"})
 
         return {
             "drag": float(drag),
             "downforce": float(downforce),
             "efficiency": float(downforce / drag if drag != 0 else 0),
-            "streamlines": [[ [float(v) for v in p] for p in path] for path in streamline_points]
+            "streamlines": streamline_data
         }
 
 

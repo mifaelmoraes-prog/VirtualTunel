@@ -1,10 +1,54 @@
 <!DOCTYPE html>
-<html lang="en">
+<html class="dark" lang="en">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Virtual Wind Tunnel | Aero Engineering</title>
-    <link rel="stylesheet" href="src/style.css">
+    <meta charset="utf-8"/>
+    <meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+    <title>Virtual Tunel By Mifael</title>
+    
+    <link href="https://fonts.googleapis.com" rel="preconnect"/>
+    <link crossorigin="" href="https://fonts.gstatic.com" rel="preconnect"/>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;700&family=Space+Grotesk:wght@300;500;700;900&display=swap" rel="stylesheet"/>
+    <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&display=swap" rel="stylesheet"/>
+    
+    <script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+    <script id="tailwind-config">
+        tailwind.config = {
+          darkMode: "class",
+          theme: {
+            extend: {
+              "colors": {
+                  "surface": "#0c0e17",
+                  "surface-dim": "#0c0e17",
+                  "outline-variant": "#464752",
+                  "surface-container-highest": "#222532",
+                  "surface-container-lowest": "#000000",
+                  "surface-container-low": "#11131d",
+                  "surface-container-high": "#1c1f2b",
+                  "surface-container": "#171924",
+                  "surface-variant": "#222532",
+                  "on-surface": "#f0f0fd",
+                  "on-surface-variant": "#aaaab7",
+                  "primary": "#81ecff",
+                  "primary-dim": "#00d4ec",
+                  "on-primary": "#005762",
+                  "secondary": "#2ff801",
+                  "error": "#ff716c",
+              },
+              "borderRadius": {
+                  "DEFAULT": "0px",
+                  "lg": "0px",
+                  "xl": "0px",
+                  "full": "9999px"
+              },
+              "fontFamily": {
+                  "headline": ["Space Grotesk"],
+                  "body": ["Inter"],
+                  "label": ["Inter"]
+              }
+            },
+          },
+        }
+    </script>
     <script type="importmap">
         {
             "imports": {
@@ -13,98 +57,328 @@
             }
         }
     </script>
+    <link rel="stylesheet" href="src/style.css">
 </head>
-<body>
-    <div class="dashboard">
-        <aside class="sidebar">
-            <header>
-                <h1 class="title-gradient">VIRTUAL TUNNEL</h1>
-                <p class="subtitle">Aero Engineering Station v2.0</p>
-            </header>
+<body class="bg-surface text-on-surface font-body selection:bg-primary/30 hidden-scroll">
+    <!-- TopNavBar -->
+    <header class="bg-[#0c0e17] text-[#81ecff] font-['Space_Grotesk'] tracking-tight text-sm uppercase border-b border-white/5 fixed top-0 w-full h-14 z-50 flex justify-between items-center px-6">
+        <div class="font-black text-xl text-[#81ecff] tracking-widest">VIRTUAL TUNEL <span class="text-sm font-normal text-slate-400 normal-case tracking-normal">By Mifael</span></div>
+        <nav class="hidden md:flex items-center gap-8 h-full">
+            <button id="nav-simulator" class="text-[#81ecff] border-b-2 border-[#81ecff] pb-1 h-full flex items-center mt-1 uppercase font-headline">Simulador</button>
+            <button id="nav-models" class="text-slate-400 hover:text-white transition-colors uppercase font-headline">Modelos</button>
+            <button id="nav-sensors" class="text-slate-400 hover:text-white transition-colors uppercase font-headline">Sensores</button>
+        </nav>
+        <div class="flex items-center gap-4">
+            <div id="sim-indicator" class="flex items-center gap-2 bg-secondary/10 px-3 py-1 text-secondary font-mono text-[10px] border border-secondary/20 hidden">
+                <span class="w-2 h-2 bg-secondary animate-pulse rounded-full"></span>
+                Simulation Running
+            </div>
+        </div>
+    </header>
 
-            <section class="glass-card">
-                <h3>📂 Load Model</h3>
-                <div class="upload-zone" id="drop-zone">
-                    <p>Drop STL/OBJ or</p>
-                    <input type="file" id="file-input" hidden accept=".stl,.obj">
-                    <button class="btn-secondary" onclick="document.getElementById('file-input').click()">CHOOSE FILE</button>
-                </div>
-                <div class="presets-list">
-                    <select id="select-preset">
-                        <option value="custom">Custom Upload</option>
-                        <option value="ahmed">Ahmed Body (Benchmark)</option>
-                        <option value="drivaer">DrivAer Model</option>
-                        <option value="mira">MIRA Notchback</option>
-                    </select>
-                </div>
-            <section class="glass-card">
-                <h3>📊 Live Metrics</h3>
-                <div class="metric-grid">
-                    <div class="metric-item">
-                        <span class="metric-label">Downforce</span>
-                        <span class="metric-value" id="val-downforce">0 <small>N</small></span>
-                    </div>
-                    <div class="metric-item">
-                        <span class="metric-label">Drag</span>
-                        <span class="metric-value" id="val-drag">0 <small>N</small></span>
-                    </div>
-                    <div class="metric-item">
-                        <span class="metric-label">Efficiency</span>
-                        <span class="metric-value" id="val-eff">0.00</span>
-                    </div>
-                    <div class="metric-item">
-                        <span class="metric-label">Amb. Pressure</span>
-                        <span class="metric-value" id="val-press">101.3 <small>kPa</small></span>
-                    </div>
-                </div>
-            </section>
-
-            <section class="glass-card">
-                <h3>🎛️ Visualization Settings</h3>
-                <div class="controls-list">
-                    <label><span>Streamlines</span> <input type="checkbox" checked id="check-streamlines"></label>
-                    <label>
-                        <span>Particle Density</span>
-                        <input type="range" id="slider-particles" min="5" max="50" value="15">
-                    </label>
-                    <label><span>Pressure Heatmap</span> <input type="checkbox" checked id="check-heatmap"></label>
-                    <label><span>Wake Effect</span> <input type="checkbox" id="check-wake"></label>
-                </div>
-            </section>
-
-
-            <button class="btn-primary" id="btn-run">
-                <span>▶️ RUN SOLVER</span>
-            </button>
-
-            <footer class="sidebar-footer">
-                System Ready | Reynolds: 1.2e6 | SST k-ω
-            </footer>
+    <!-- VIEW: SIMULATOR -->
+    <div id="view-simulator" class="block w-full h-full pt-14 pb-8">
+        <!-- SideNavBar (Viewport Control) -->
+        <aside class="bg-[#11131d] fixed left-0 top-14 bottom-8 w-20 flex flex-col items-center z-40 border-r border-white/5 font-['Inter'] text-[11px] font-bold uppercase">
+            <div class="py-4 text-center border-b border-white/5 w-full">
+                <div class="text-[#81ecff] text-[10px]">VIEWPORT</div>
+            </div>
+            <div class="flex flex-col w-full">
+                <button id="btn-reset-view" class="text-slate-500 hover:bg-[#1c1f2b] hover:text-white py-6 flex flex-col items-center gap-2 transition-all duration-150">
+                    <span class="material-symbols-outlined" data-icon="3d_rotation">3d_rotation</span>
+                    Reset
+                </button>
+            </div>
         </aside>
 
-        <main class="viewer-container">
-            <div id="three-container"></div>
-            
-            <div class="viewer-controls">
-                <button class="btn-secondary" id="btn-reset-view">RESET VIEW</button>
+        <!-- Main Viewport Area -->
+        <main class="fixed inset-0 left-20 right-80 top-14 bottom-8 bg-surface-dim overflow-hidden">
+            <!-- 3D Visualization Layer -->
+            <div id="three-container" class="relative w-full h-full bg-surface-container-lowest"></div>
+
+            <!-- Loading Overlay -->
+            <div id="loading" class="absolute inset-0 bg-surface-dim/80 backdrop-blur-sm z-50 flex flex-col justify-center items-center opacity-0 pointer-events-none transition-opacity duration-300">
+                <div class="w-12 h-12 border-4 border-primary border-t-transparent rounded-full animate-spin mb-4"></div>
+                <div class="font-headline font-bold text-primary tracking-widest">SOLVING NAVIER-STOKES...</div>
             </div>
 
-            <div class="probe-overlay glass-card">
-
-                <h4>PROBE DATA</h4>
-                <div class="probe-data">
-                    <div id="probe-p">P: ---</div>
-                    <div id="probe-u">U: ---</div>
-                    <div id="probe-cp">Cp: ---</div>
+            <!-- HUD Overlay: Point Pressure -->
+            <div class="absolute top-10 left-10 space-y-4 pointer-events-none">
+                <div id="probe-hud" class="glass-hud p-4 border-l-2 border-secondary opacity-0 transition-opacity">
+                    <div class="text-on-surface-variant text-[10px] font-bold uppercase tracking-widest mb-1" id="probe-title">PROBE DATA</div>
+                    <div id="probe-p" class="text-secondary font-headline text-2xl font-bold">-- <span class="text-sm">Pa</span></div>
+                    <div id="probe-u" class="text-secondary font-headline text-2xl font-bold mt-1">-- <span class="text-sm">m/s</span></div>
+                    <div id="probe-cp" class="text-[9px] text-on-secondary/60 mt-2 font-mono uppercase">Cp: --</div>
                 </div>
             </div>
 
-            <div class="loading-overlay" id="loading">
-                <div class="spinner"></div>
-                <p>SIMULATING FLOW...</p>
+            <!-- Coordinate Axes Widget -->
+            <div class="absolute bottom-10 left-10 flex gap-4 items-end opacity-60 pointer-events-none">
+                <div class="flex flex-col items-center gap-1"><div class="h-12 w-0.5 bg-error"></div><span class="text-[9px] font-bold text-error">X</span></div>
+                <div class="flex flex-col items-center gap-1"><div class="h-8 w-0.5 bg-secondary"></div><span class="text-[9px] font-bold text-secondary">Y</span></div>
+                <div class="flex flex-col items-center gap-1"><div class="h-4 w-0.5 bg-primary"></div><span class="text-[9px] font-bold text-primary">Z</span></div>
+            </div>
+
+            <!-- Bottom Data Cluster (Graphs & Track) -->
+            <div class="absolute bottom-6 left-1/2 -translate-x-1/2 flex gap-4 w-[90%] max-w-4xl pointer-events-none">
+                <div class="glass-hud flex-1 p-3 flex flex-col h-32 border border-white/5 pointer-events-auto">
+                    <div class="flex justify-between items-center mb-2">
+                        <span class="text-[10px] font-bold uppercase tracking-tighter text-primary">Downforce / Drag (N)</span>
+                        <span id="val-eff" class="text-[10px] font-mono text-white">Eff: 0.00</span>
+                    </div>
+                    <div class="flex-1 flex flex-col gap-2 justify-center">
+                        <div>
+                            <div class="flex justify-between text-[10px] font-mono mb-1"><span class="text-on-surface-variant">Downforce</span><span id="val-downforce" class="text-primary">0 N</span></div>
+                            <div class="w-full bg-surface/50 h-2"><div id="bar-downforce" class="bg-primary h-full" style="width: 0%"></div></div>
+                        </div>
+                        <div>
+                            <div class="flex justify-between text-[10px] font-mono mb-1"><span class="text-on-surface-variant">Drag</span><span id="val-drag" class="text-secondary">0 N</span></div>
+                            <div class="w-full bg-surface/50 h-2"><div id="bar-drag" class="bg-secondary h-full" style="width: 0%"></div></div>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="glass-hud flex-1 p-3 flex flex-col h-32 border border-white/5 pointer-events-auto">
+                    <div class="flex justify-between items-center mb-2">
+                        <span class="text-[10px] font-bold uppercase tracking-tighter text-secondary">🏎️ Track Performance</span>
+                        <span id="perf-lap-delta" class="text-[10px] font-mono text-white font-bold">--s</span>
+                    </div>
+                    <div class="flex-1 flex gap-4">
+                        <div class="flex-1 flex flex-col justify-center gap-2">
+                             <div class="text-[10px] text-on-surface-variant font-mono uppercase">Top Speed Gain</div>
+                             <div id="perf-speed-gain" class="font-headline font-bold text-lg text-primary">-- km/h</div>
+                        </div>
+                        <div class="flex-1 overflow-hidden flex items-center justify-center relative">
+                            <canvas id="track-map" width="160" height="90" class="absolute"></canvas>
+                        </div>
+                    </div>
+                </div>
             </div>
         </main>
+
+        <!-- Right Side Panel (Settings) -->
+        <aside class="fixed right-0 top-14 bottom-8 w-80 bg-surface-container-low border-l border-white/5 z-40 overflow-y-auto hidden-scroll">
+            <div class="p-6">
+                <h2 class="font-headline font-bold text-sm tracking-widest text-primary mb-8 border-b border-primary/20 pb-2">SIMULATION PARAMETERS</h2>
+                <div class="space-y-8">
+                    
+                    <!-- Wind Speed Setting -->
+                    <div class="space-y-3">
+                        <div class="flex justify-between items-center">
+                            <label class="text-[11px] font-bold uppercase text-on-surface-variant">Wind Speed Base</label>
+                            <span id="velocity-val" class="text-primary font-mono text-xs">20.0 M/S</span>
+                        </div>
+                        <div class="relative">
+                            <input type="range" id="slider-velocity" min="5" max="100" step="1" value="20" class="w-full h-1 bg-surface-container-highest appearance-none cursor-pointer outline-none accent-primary">
+                        </div>
+                    </div>
+
+                    <!-- Yaw Setting -->
+                    <div class="space-y-3 pt-4 border-t border-white/5">
+                        <div class="flex justify-between items-center">
+                            <label class="text-[11px] font-bold uppercase text-on-surface-variant">Model Yaw (Crosswind)</label>
+                            <span id="yaw-val" class="text-secondary font-mono text-xs">0&deg;</span>
+                        </div>
+                        <div class="relative">
+                            <input type="range" id="slider-yaw" min="-180" max="180" step="5" value="0" class="w-full h-1 bg-surface-container-highest appearance-none cursor-pointer outline-none accent-secondary">
+                        </div>
+                    </div>
+
+                    <!-- Transient Engine Settings -->
+                    <div class="space-y-4 pt-4 border-t border-white/5">
+                        <label class="text-[11px] font-bold uppercase text-on-surface-variant block">Transient Engine Settings</label>
+                        
+                        <div class="space-y-1">
+                            <div class="flex justify-between items-center">
+                                <span class="text-[10px] text-slate-400">Resolution (Paths)</span>
+                                <span id="res-val" class="text-primary font-mono text-[10px]">20</span>
+                            </div>
+                            <input type="range" id="slider-resolution" min="10" max="100" step="10" value="20" class="w-full h-1 bg-surface-container-highest appearance-none cursor-pointer">
+                        </div>
+
+                        <div class="space-y-1">
+                            <div class="flex justify-between items-center">
+                                <span class="text-[10px] text-slate-400">Loop Duration</span>
+                                <span id="loop-val" class="text-primary font-mono text-[10px]">4.0s</span>
+                            </div>
+                            <input type="range" id="slider-loop" min="0.5" max="10" step="0.5" value="4.0" class="w-full h-1 bg-surface-container-highest appearance-none cursor-pointer">
+                        </div>
+                    </div>
+
+                    <!-- Flow Control -->
+                    <div class="space-y-4 pt-4 border-t border-white/5">
+                        <label class="text-[11px] font-bold uppercase text-on-surface-variant block">Visual Layers</label>
+                        
+                        <div class="flex flex-col gap-2">
+                            <div class="flex justify-between items-center">
+                                <span class="text-xs">Streamlines</span>
+                                <input type="checkbox" id="check-streamlines" checked class="form-checkbox bg-surface-container border-outline-variant text-secondary rounded-none w-5 h-5 focus:ring-0">
+                            </div>
+                        </div>
+
+                        <div class="flex items-center justify-between mt-4">
+                            <span class="text-xs">Pressure Heatmap</span>
+                            <input type="checkbox" id="check-heatmap" checked class="form-checkbox bg-surface-container border-outline-variant text-secondary rounded-none w-5 h-5 focus:ring-0">
+                        </div>
+
+                        <div class="flex items-center justify-between mt-4">
+                            <span class="text-xs">Vortex Visualization</span>
+                            <input type="checkbox" id="check-vortex" class="form-checkbox bg-surface-container border-outline-variant text-secondary rounded-none w-5 h-5 focus:ring-0">
+                        </div>
+                    </div>
+
+                    <!-- Action Buttons -->
+                    <div class="pt-4 border-t border-white/5 space-y-3">
+                        <button id="btn-run" class="w-full kinetic-gradient text-on-primary py-4 font-headline font-bold text-sm tracking-widest shadow-[0_0_20px_rgba(129,236,255,0.3)] uppercase active:opacity-80 transition-all flex items-center justify-center gap-2">
+                            <span class="material-symbols-outlined text-lg" style="font-variation-settings: 'FILL' 1;">play_arrow</span>
+                            UPDATE & RUN
+                        </button>
+                        
+                        <button id="btn-track-analysis" class="w-full bg-surface-container-highest border border-primary/30 text-primary py-3 font-headline text-xs tracking-widest hover:bg-primary/10 transition-colors uppercase flex items-center justify-center gap-2">
+                            <span class="material-symbols-outlined text-sm">satellite_alt</span>
+                            TRACK ANALYSIS
+                        </button>
+                    </div>
+
+                </div>
+            </div>
+        </aside>
     </div>
+
+    <!-- VIEW: MODEL MANAGEMENT -->
+    <div id="view-models" class="hidden w-full h-full pt-14 pb-8 pl-20">
+        <section class="h-full p-6 overflow-y-auto border-r border-white/5 w-full max-w-screen-xl mx-auto">
+            <header class="mb-8">
+                <h1 class="text-3xl font-headline font-black tracking-tight text-white uppercase mb-2">Model Asset Management</h1>
+                <p class="text-on-surface-variant font-label text-sm uppercase tracking-widest">Global Repository / Simulation Ready</p>
+            </header>
+
+            <div class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
+                <!-- Preset: Ahmed -->
+                <div class="bg-surface-container-low border border-white/5 group hover:border-primary/50 transition-colors">
+                    <div class="h-48 bg-surface-container-highest relative overflow-hidden flex items-center justify-center border-b border-white/5">
+                        <span class="material-symbols-outlined text-7xl text-outline-variant group-hover:text-primary transition-colors">directions_car</span>
+                        <div class="absolute top-2 left-2 bg-primary/10 border border-primary/20 px-2 py-1"><span class="text-[10px] font-mono text-primary">PRESET: AHMED</span></div>
+                    </div>
+                    <div class="p-4">
+                        <div class="flex justify-between items-start mb-2"><h3 class="font-headline font-bold text-white uppercase">Ahmed Body</h3></div>
+                        <p class="text-[10px] font-mono text-on-surface-variant mb-4 hidden-scroll h-8">Standard aerodynamic benchmark geometry.</p>
+                        <button class="btn-load-preset w-full bg-surface-container-highest py-2 text-primary border border-primary/30 font-headline font-bold uppercase text-xs hover:bg-primary hover:text-on-primary transition-colors" data-id="ahmed">
+                            Load into Viewport
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Preset: Drivaer -->
+                <div class="bg-surface-container-low border border-white/5 group hover:border-primary/50 transition-colors">
+                    <div class="h-48 bg-surface-container-highest relative overflow-hidden flex items-center justify-center border-b border-white/5">
+                        <span class="material-symbols-outlined text-7xl text-outline-variant group-hover:text-primary transition-colors">airport_shuttle</span>
+                        <div class="absolute top-2 left-2 bg-primary/10 border border-primary/20 px-2 py-1"><span class="text-[10px] font-mono text-primary">PRESET: DRIVAER</span></div>
+                    </div>
+                    <div class="p-4">
+                        <div class="flex justify-between items-start mb-2"><h3 class="font-headline font-bold text-white uppercase">DrivAer Model</h3></div>
+                        <p class="text-[10px] font-mono text-on-surface-variant mb-4 hidden-scroll h-8">Realistic passenger car benchmark.</p>
+                        <button class="btn-load-preset w-full bg-surface-container-highest py-2 text-primary border border-primary/30 font-headline font-bold uppercase text-xs hover:bg-primary hover:text-on-primary transition-colors" data-id="drivaer">
+                            Load into Viewport
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Upload Custom -->
+                <div id="drop-zone" class="bg-surface-container-low border-2 border-dashed border-outline-variant flex flex-col items-center justify-center p-8 hover:border-primary transition-all group cursor-pointer h-full min-h-[300px]">
+                    <span class="material-symbols-outlined text-4xl text-outline mb-4 group-hover:text-primary">upload_file</span>
+                    <p class="font-headline font-bold text-white uppercase text-xs">Upload Custom Mesh</p>
+                    <p class="text-[10px] text-on-surface-variant font-mono mt-1 mb-4">STL, OBJ</p>
+                    <input type="file" id="file-input" hidden accept=".stl,.obj">
+                    <button class="bg-primary/10 text-primary px-4 py-2 text-xs font-bold uppercase" onclick="document.getElementById('file-input').click()">Browse Files</button>
+                </div>
+            </div>
+        </section>
+    </div>
+
+    <!-- VIEW: SENSORS -->
+    <div id="view-sensors" class="hidden w-full h-full pt-14 pb-8 pl-10 pr-10">
+        <div class="grid grid-cols-12 gap-px bg-white/5 h-full max-w-[1400px] mx-auto">
+            <!-- Simulation Run Sidebar -->
+            <div class="col-span-3 bg-surface-container-low p-4 flex flex-col gap-4 border-r border-white/5 overflow-y-auto">
+                <h3 class="text-[10px] font-bold tracking-widest text-on-surface-variant uppercase">Simulation History</h3>
+                <div class="space-y-2">
+                    <div class="p-3 bg-surface-container-highest border-l-2 border-primary cursor-pointer group">
+                        <div class="flex justify-between items-start mb-1">
+                            <span class="text-xs font-bold text-primary">RUN_CURRENT</span>
+                            <span class="text-[9px] text-secondary">LIVE</span>
+                        </div>
+                        <p class="text-[10px] text-on-surface-variant leading-tight">Active Simulation Profile<br/>Speed: Configured</p>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Visualization Center -->
+            <div class="col-span-9 grid grid-cols-10 grid-rows-6 gap-px p-4 bg-surface-dim overflow-y-auto">
+                
+                <!-- Large Gauges Section -->
+                <div class="col-span-10 row-span-2 bg-surface-container-high p-6 flex gap-6 relative group border border-white/5">
+                    <div class="flex-1 flex flex-col justify-center">
+                        <span class="text-[10px] font-mono text-primary uppercase tracking-[0.2em] mb-1">Macro Downforce</span>
+                        <div class="flex items-baseline gap-2">
+                            <span id="sensor-val-downforce" class="text-6xl font-headline font-black text-on-surface">--</span>
+                            <span class="text-xl font-headline text-primary">N</span>
+                        </div>
+                    </div>
+                    <div class="flex-1 flex flex-col justify-center text-right">
+                        <span class="text-[10px] font-mono text-secondary uppercase tracking-[0.2em] mb-1">Micro Local Pressure</span>
+                        <div class="flex items-baseline gap-2 justify-end">
+                            <span id="sensor-val-pressure" class="text-6xl font-headline font-black text-on-surface">--</span>
+                            <span class="text-xl font-headline text-secondary">Pa</span>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Sensor Table View -->
+                <div class="col-span-10 row-span-4 bg-surface-container-high border border-white/5 overflow-hidden flex flex-col mt-4">
+                    <div class="flex items-center justify-between px-6 py-3 border-b border-white/5">
+                        <h4 class="text-[11px] font-black uppercase tracking-widest text-on-surface">Individual Sensor Node Analytics</h4>
+                        <div class="flex items-center gap-2">
+                            <span class="text-[10px] text-on-surface-variant">FILTER:</span>
+                            <span class="text-[10px] font-bold text-primary">ALL NODES</span>
+                        </div>
+                    </div>
+                    <div class="overflow-y-auto hidden-scroll flex-1">
+                        <table class="w-full text-left border-collapse">
+                            <thead class="sticky top-0 bg-surface-container-highest z-10">
+                                <tr class="text-[9px] uppercase tracking-tighter text-on-surface-variant border-b border-white/5">
+                                    <th class="px-6 py-2 font-bold">Node ID</th>
+                                    <th class="px-6 py-2 font-bold">Coord X</th>
+                                    <th class="px-6 py-2 font-bold">Coord Y</th>
+                                    <th class="px-6 py-2 font-bold">Coord Z</th>
+                                    <th class="px-6 py-2 font-bold">Status</th>
+                                    <th class="px-6 py-2 font-bold text-right">Pressure (Pa)</th>
+                                </tr>
+                            </thead>
+                            <tbody id="sensor-table-body" class="text-[11px] font-mono divide-y divide-white/5">
+                                <!-- Populated dynamically -->
+                                <tr class="hover:bg-white/5 transition-colors"><td colspan="6" class="px-6 py-8 text-center text-on-surface-variant">Run simulation to acquire sensor telemetry.</td></tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Footer -->
+    <footer class="fixed bottom-0 w-full h-8 bg-[#0c0e17] text-[#2ff801] font-mono text-[10px] tracking-tighter border-t border-white/10 flex items-center px-4 justify-between z-50">
+        <div class="flex items-center gap-4">
+            <span id="footer-status">SYSTEM STATUS: IDLE</span>
+            <span class="text-slate-500">|</span>
+            <span class="text-slate-500">REYNOLDS: 1.2e6</span>
+        </div>
+        <div class="flex items-center gap-2">
+            <div class="w-1.5 h-1.5 rounded-full bg-secondary opacity-50"></div>
+            <span class="text-slate-500">SST K-OMEGA ENGINE</span>
+        </div>
+    </footer>
+
     <script type="module" src="src/main.js"></script>
 </body>
 </html>

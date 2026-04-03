@@ -5,11 +5,15 @@ from services.mesh_engine import MeshEngine
 from services.aero_solver import AeroSolver
 from services.lidar_processor import LiDARProcessor
 from services.benchmark_generator import BenchmarkGenerator
+from services.track_simulator import TrackSimulator
 import os
 import shutil
 
 app = FastAPI(title="Virtual Wind Tunnel API")
 gen = BenchmarkGenerator()
+track_sim = TrackSimulator("../trackday/telemetry.csv")
+
+
 
 app.add_middleware(
     CORSMiddleware,
@@ -50,7 +54,7 @@ def list_benchmarks():
     }
 
 @app.post("/simulate")
-def run_simulation(model_id: str = "default", v_wind: float = 20.0):
+def run_simulation(model_id: str = "default", v_wind: float = 20.0, yaw: float = 0.0, resolution: int = 20):
     """
     Triggers a high-fidelity CFD simulation.
     """
@@ -63,12 +67,12 @@ def run_simulation(model_id: str = "default", v_wind: float = 20.0):
         else:
             mesh_path = f"data/{model_id}.stl"
             if not os.path.exists(mesh_path):
-                mesh_path = "data/default_mesh.stl"
+                mesh_path = "data/default.obj"
 
         # 2. Run Aero Solver
         output_file = f"data/{model_id}_sim.vtp"
         solver = AeroSolver()
-        metrics = solver.solve(mesh_path, v_wind=v_wind, output_path=output_file)
+        metrics = solver.solve(mesh_path, v_wind=v_wind, yaw=yaw, resolution=resolution, output_path=output_file)
         
         return {
             "status": "success",
@@ -132,7 +136,20 @@ def clean_scan(file_path: str = "data/raw_scan.ply"):
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
+@app.post("/track/analysis")
+def get_track_performance(model_id: str = "default", cd: float = 0.35, cl: float = 0.1):
+    """
+    Correlates current wind tunnel results with the Trackday simulator.
+    """
+    try:
+        analysis = track_sim.analyze_performance(cd, cl)
+        return analysis
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 @app.get("/ar/asset/{model_id}")
+
 def get_ar_asset(model_id: str):
     """
     Returns an AR-ready GLB asset for the mobile app.
